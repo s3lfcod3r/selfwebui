@@ -1,5 +1,5 @@
 """Compatibility endpoints for the existing SelfDashboard widgets."""
-import json,os,threading,time
+import json,os,threading,time,urllib.request
 from pathlib import Path
 from datetime import datetime,timezone
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
@@ -15,13 +15,25 @@ def project_status():
             value=json.loads(p.read_text())
             if isinstance(value,dict) and (latest is None or value.get('updated',0)>latest.get('updated',0)):latest=value
         except (OSError,ValueError):continue
+    keyfile=Path(os.environ.get('WORKER_KEY_FILE','/run/worker.key'))
+    if keyfile.is_file():
+        try:
+            base=os.environ.get('BONSAI_WORKER_URL','http://OpenWebUI-Werkzeuge:8000')
+            req=urllib.request.Request(base+'/bonsai_jobs',headers={'Authorization':'Bearer '+keyfile.read_text().strip()})
+            with urllib.request.urlopen(req,timeout=3) as response:plans=json.load(response).get('jobs',[])
+            for plan in plans:
+                for step in plan.get('steps',[]):
+                    value=dict(step)
+                    if plan.get('done') and plan.get('error'):value.update(phase='gescheitert',updated=plan.get('updated',0))
+                    if latest is None or value.get('updated',0)>latest.get('updated',0):latest=value
+        except (OSError,ValueError):pass
     if latest:
         phase=latest.get('phase');updated=latest.get('updated',0)
         terminal=phase in ['fertig','erledigt']
         stale=time.time()-updated>30 and not terminal
         state='fertig' if terminal else ('wartet' if stale or phase in ['gescheitert','bonsai_beschaeftigt','bonsai_nicht_verfuegbar'] else 'in Arbeit')
-        info=('Letzter Auftrag abgeschlossen' if terminal else 'Kein aktuelles Aktivitätssignal' if stale else 'Arbeiterstatus: '+str(phase))
-        result['projekte'].insert(0,{'name':'SelfWebUI · RTX-Arbeiter','geaendert':datetime.fromtimestamp(updated,timezone.utc).isoformat(),
+        info=('Letzter Auftrag abgeschlossen' if terminal else 'Kein aktuelles AktivitÃ¤tssignal' if stale else 'Arbeiterstatus: '+str(phase))
+        result['projekte'].insert(0,{'name':'SelfWebUI Â· RTX-Arbeiter','geaendert':datetime.fromtimestamp(updated,timezone.utc).isoformat(),
             'fragen':[], 'aufgaben':[{'name':'Arbeiterauftrag','zustand':state,'text':info}]})
     result['quelle']='SelfWebUI: STATUS.md und RTX-Arbeitertelemetrie'
     return result

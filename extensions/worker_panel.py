@@ -1,4 +1,7 @@
 """Admin-only worker telemetry and explicitly requested task reports."""
+import asyncio
+import urllib.request
+import os
 import json
 import math
 import time
@@ -25,6 +28,12 @@ def summary(raw, now):
     clean['stale'] = now - clean.get('updated', 0) > 15 and clean['phase'] not in TERMINAL
     return clean
 
+def remote_jobs():
+    key=Path('/data/brain/worker.key').read_text().strip()
+    base=os.environ.get('BONSAI_WORKER_URL','http://OpenWebUI-Werkzeuge:8000').rstrip('/')
+    req=urllib.request.Request(base+'/bonsai_jobs',headers={'Authorization':'Bearer '+key})
+    with urllib.request.urlopen(req,timeout=2) as response:return json.load(response).get('jobs',[])
+
 @router.get('/worker/status')
 async def status(request: Request):
     require_admin(request)
@@ -45,7 +54,20 @@ async def status(request: Request):
                 jobs.append(item)
         except (OSError, ValueError, TypeError):
             continue
-    return JSONResponse({'jobs': jobs, 'scope': 'all-worker-jobs'}, headers={'Cache-Control': 'no-store'})
+    try:
+        plans=await asyncio.to_thread(remote_jobs)
+        for plan in plans:
+            for raw in plan.get('steps',[]):
+                item=summary(raw,now);item['id']=raw['job_id']
+                if not plan.get('done') and raw is plan.get('steps',[])[-1]:item['stale']=False
+                result=raw.get('result')
+                if result:item['bericht']=str(result.get('bericht',result.get('hinweis','')))[:16000]
+                elif plan.get('done') and plan.get('error'):
+                    item.update(phase='gescheitert',bericht=plan['error'],stale=False)
+                jobs=[j for j in jobs if j['id']!=item['id']];jobs.append(item)
+        jobs.sort(key=lambda j:j.get('started',0),reverse=True)
+    except (OSError,ValueError):pass
+    return JSONResponse({'jobs': jobs[:30], 'scope': 'all-worker-jobs'}, headers={'Cache-Control': 'no-store'})
 
 @router.get('/worker/panel.js')
 async def script():
