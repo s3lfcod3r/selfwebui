@@ -29,7 +29,7 @@
         const rate=terminal.has(job.phase)?job.last_tps:job.tps;
         item.textContent=`${job.projekt?job.projekt+' · ':''}${job.schritt?'Schritt '+job.schritt+'/'+job.gesamt+' · ':''}${job.titel||'RTX-Arbeiterauftrag'}\n${label(job)} · ${seconds}s\n${job.tokens||0} Tokens · ${Number.isFinite(rate)?rate.toFixed(1)+' Token/s':'Rate noch nicht verfügbar'} · ${job.tools||0} Werkzeuge`;
         item.style.whiteSpace='pre-line';
-        if(job.bericht){const details=document.createElement('details'),heading=document.createElement('summary'),body=document.createElement('div');heading.textContent='Ergebnis ansehen';body.textContent=job.bericht;body.style.cssText='max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere';details.open=expanded.has(job.id);details.ontoggle=()=>{if(details.open)expanded.add(job.id);else expanded.delete(job.id);};details.append(heading,body);item.append(details);}
+        if(job.bericht){const details=document.createElement('details'),heading=document.createElement('summary'),body=document.createElement('div');heading.textContent='Ergebnis ansehen';body.textContent='Auftrag-ID: '+(job.plan||job.id)+'\n\n'+job.bericht;body.style.cssText='max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere';details.open=expanded.has(job.id);details.ontoggle=()=>{if(details.open)expanded.add(job.id);else expanded.delete(job.id);};details.append(heading,body);item.append(details);}
         list.append(item);
       }
     } catch {button.textContent='RTX2000 · Status nicht erreichbar';}

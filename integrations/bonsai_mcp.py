@@ -14,6 +14,10 @@ def request(path,data=None):
 
 def call(args):
     if not isinstance(args,dict):raise ValueError('Objekt erwartet')
+    if args.get('aktion')=='liste':
+        records=request('/bonsai_jobs').get('jobs',[])
+        items=[{k:r.get(k) for k in ['job_id','titel','projekt','phase','done','schritt','gesamt','started','updated']} for r in records]
+        return {'content':[{'type':'text','text':json.dumps({'auftraege':items},ensure_ascii=False)}],'isError':False}
     job=args.get('job_id')
     existing=bool(job)
     if not job:
@@ -38,6 +42,7 @@ def call(args):
     return {'content':[{'type':'text','text':json.dumps(state,ensure_ascii=False)}], 'isError':bool(state.get('done') and state.get('phase') not in ['fertig','erledigt'])}
 
 SCHEMA.pop('required',None)
+SCHEMA['properties']['aktion']={'type':'string','enum':['liste'],'description':'Gespeicherte Aufträge auflisten, wenn die job_id fehlt. Startet keine Arbeit.'}
 SCHEMA['properties']['job_id']={'type':'string','description':'Gespeicherten Auftrag und Ergebnis mit dieser ID abfragen. Dabei keinen neuen Auftrag starten.'}
 SCHEMA['properties'].update({
  'titel':{'type':'string','description':'Kurzer sichtbarer Titel dieses abgegrenzten Arbeiterauftrags; keine Geheimnisse.'},
