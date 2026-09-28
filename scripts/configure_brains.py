@@ -36,7 +36,7 @@ async def main():
     connections = [c for c in connections if c.get('id') != 'selfwebui-rtx2000']
     connections.append(dict(id='selfwebui-rtx2000', name='RTX2000 Gehirn',
         provider='openai', api_type='chat_completions', provider_type='llama.cpp',
-        prefix_id='RTX2000', base_url=base, api_key=None, enabled=True,
+        prefix_id='RTX2000', base_url=base, api_key='local-no-auth', enabled=True,
         data={'models': [model]}))
     servers = await Config.get('tool_servers') or []
     servers = [s for s in servers if s.get('id') != 'bonsai']
