@@ -59,10 +59,11 @@ def status() -> dict:
             continue
         try:
             eintrag = lies_status(datei)
+            geaendert = datei.stat().st_mtime
         except OSError:
             continue
         eintrag["name"] = f"{praefix} · {ordner.name}" if praefix else ordner.name
-        eintrag["geaendert"] = datetime.fromtimestamp(datei.stat().st_mtime, timezone.utc).isoformat(timespec="seconds")
+        eintrag["geaendert"] = datetime.fromtimestamp(geaendert, timezone.utc).isoformat(timespec="seconds")
         projekte.append(eintrag)
     # Projekte mit offenen Fragen zuerst, dann nach letzter Aenderung.
     projekte.sort(key=lambda p: (not p["fragen"], p["geaendert"]), reverse=False)

@@ -118,18 +118,10 @@ def summen(roh: dict, spitzen: dict | None = None) -> dict:
     agenten, server = {}, {}
     for schluessel, wert in roh.items():
         teile = schluessel.split("|")
-        if teile[0] == "agent":
-            _, agent, provider, art = teile
-            if art in gesamt:
-                gesamt[art] += wert
-            if art in ("ein", "aus"):
-                agenten.setdefault("OpenClaw (Verlauf) · "+agent, {"ein": 0, "aus": 0})[art] += wert
-        elif teile[0] == "server":
+        if teile[0] == "server":
             _, name, art = teile
             server.setdefault(name, {"ein": 0, "aus": 0})[art] += wert
-    # Die Gesamtzahl kommt von den Modell-Servern: sie zaehlen laufend mit.
-    # OpenClaws eigene Zaehler springen nur zu bestimmten Zeitpunkten und
-    # wirken dazwischen eingefroren - die zeigen wir nur als Aufteilung.
+    # Retain historical files, but expose only model-server counters.
     if server:
         gesamt["ein"] = sum(w["ein"] for w in server.values())
         gesamt["aus"] = sum(w["aus"] for w in server.values())
