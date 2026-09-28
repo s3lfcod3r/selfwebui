@@ -5,13 +5,13 @@ import threading,time,uuid,hashlib
 from pathlib import Path
 BASE=os.environ.get('BONSAI_WORKER_URL','http://OpenWebUI-Werkzeuge:8000').rstrip('/')
 KEY=Path(os.environ.get('BONSAI_WORKER_KEY_FILE','/data/brain/worker.key')).read_text().strip()
-SCHEMA={'type':'object','required':['auftrag'],'properties':{'auftrag':{'type':'string','description':'Eigenstaendiger Auftrag mit Ziel und erwarteten Ergebnissen. Veraenderungen nur mit Nutzerauftrag.'},'kontext':{'type':'string','description':'Relevanter Kontext, Pfade, Hosts und Einschraenkungen.'},'denken':{'type':'string','enum':['aus','wenig','mittel','viel']}}}
+SCHEMA={'type':'object','required':['auftrag'],'properties':{'browser_interaktiv':{'type':'boolean','description':'Nur true bei ausdrücklich beauftragten Webseiten-Änderungen.'},'auftrag':{'type':'string','description':'Eigenstaendiger Auftrag mit Ziel und erwarteten Ergebnissen. Veraenderungen nur mit Nutzerauftrag.'},'kontext':{'type':'string','description':'Relevanter Kontext, Pfade, Hosts und Einschraenkungen.'},'denken':{'type':'string','enum':['aus','wenig','mittel','viel']}}}
 def send(x):
     print(json.dumps(x,ensure_ascii=False),flush=True)
 def call(args):
     if not isinstance(args,dict) or not isinstance(args.get('auftrag'),str) or not args['auftrag'].strip(): raise ValueError('auftrag fehlt')
     job=uuid.uuid4().hex
-    channel=os.environ.get('BONSAI_CHANNEL','')
+    channel=os.environ.get('BONSAI_CHANNEL','selfwebui-worker')
     target=None
     if channel:
         directory=Path('/data/brain/live')/hashlib.sha256(channel.encode()).hexdigest()

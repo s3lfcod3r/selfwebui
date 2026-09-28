@@ -28,7 +28,7 @@ Direct proxy mode renders HTML instead of video. Select proxy mode in Computer's
 
 ## Subscription and worker configuration
 
-Existing `/data` configuration is preserved; no credentials are shipped. For a fresh installation, log in through the CLI's supported flow. Optionally copy the files from `/opt/selfwebui/integrations` into `/data/brain`; configure the CLI MCP command as `python /data/brain/bonsai_mcp.py`. Store the existing worker token in `/data/brain/worker.key` (mode 600), and set `BONSAI_WORKER_URL` if required. The worker must expose the existing Bonsai API. Wrapper restrictions are workflow controls, not an OS security boundary. The old custom Open WebUI token panel is not part of Computer; browser sessions and worker sessions remain separate.
+Existing `/data` configuration is preserved; no credentials are shipped. For a fresh installation, log in through the CLI's supported flow. Optionally copy the files from `/opt/selfwebui/integrations` into `/data/brain`; configure the CLI MCP command as `python /data/brain/bonsai_mcp.py`. Store the existing worker token in `/data/brain/worker.key` (mode 600), and set `BONSAI_WORKER_URL` if required. The worker must expose the existing Bonsai API. Wrapper restrictions are workflow controls, not an OS security boundary. The new admin-only RTX panel reports worker phases, generated tokens and token/s from the model server. It shows all worker jobs in this installation, not only the current chat. Existing bridge copies in /data/brain must be updated to enable the default telemetry channel.
 
 ## Development
 
@@ -49,3 +49,17 @@ The script requires `/data/brain/worker.key` and `/data/brain/bonsai_mcp.py`; it
 `docker build -t selfwebui:test .`
 
 The build runs the patch regression test. Runtime settings, accounts, chats, SSH keys and model credentials must never be committed. See [NOTICE.md](NOTICE.md) for upstream attribution.
+
+## Direct worker browser
+
+Open **Arbeiter-Browser**, enter a URL, and log in manually. Click **Arbeiter verbinden** to let the existing worker read and operate that same visible HTML frame. **Selbst übernehmen** returns manual control. Keep this tab visible; inactive tabs stop polling. This is direct HTML, not a video stream. Only one browser controller is connected at a time. Ordinary Computer browser tabs are not automatically connected.
+
+The optional integration requires the existing Bonsai worker service and matching worker key on both sides. On the worker host, copy `integrations/direct_browser_client.py` and `integrations/install_worker_bridge.py` together, then run:
+
+```sh
+python install_worker_bridge.py --app-dir /PATH/TO/WORKER/app --config-dir /PATH/TO/WORKER/geheim --computer-url http://OpenWebUI-Computer:8000
+```
+
+Set `direct-browser.json` ownership to the worker service UID (99:100 for the existing Unraid service), preserve mode 600, and restart the worker. Both containers must share a Docker network. This installer patches only the supported existing `browser_tools.py`; it is not a replacement worker service. Disable the relay by moving `direct-browser.json` aside and restarting the worker; the original browser implementation remains present.
+
+The worker receives visible text and element references, with form values omitted. Clicks and text entry still require the worker job's interactive flag. Credential entry remains manual. Screenshots of this local HTML view are unsupported by the server; the worker returns an explicit explanation rather than an image from another session. Modern web applications can still have proxy compatibility limitations.
