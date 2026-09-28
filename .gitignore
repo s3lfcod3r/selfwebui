@@ -1,0 +1,11 @@
+*.key
+*.pem
+.env
+.env.*
+*.db
+*.sqlite*
+*.jsonl
+__pycache__/
+data/
+runtime/
+credentials/

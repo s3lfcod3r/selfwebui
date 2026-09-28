@@ -1,0 +1,3 @@
+#!/usr/bin/env python3
+import os,sys
+os.execv('/usr/local/bin/codex',['codex','-c','features.shell_tool=false','-c','features.unified_exec=false','-c','features.apply_patch_freeform=false','-c','features.multi_agent=false','-c','web_search="disabled"',*sys.argv[1:]])

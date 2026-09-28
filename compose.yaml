@@ -1,0 +1,12 @@
+services:
+  computer:
+    image: ghcr.io/s3lfcod3r/selfwebui:latest
+    ports:
+      - "3082:8000"
+    volumes:
+      - ./data:/data
+    shm_size: 512mb
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]

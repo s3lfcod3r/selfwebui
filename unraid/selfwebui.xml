@@ -1,0 +1,16 @@
+<Container version="2">
+  <Name>OpenWebUI-Computer</Name>
+  <Repository>ghcr.io/s3lfcod3r/selfwebui:latest</Repository>
+  <Registry>https://ghcr.io/s3lfcod3r/selfwebui</Registry>
+  <Network>bridge</Network>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/s3lfcod3r/selfwebui/issues</Support>
+  <Project>https://github.com/open-webui/computer</Project>
+  <Icon>https://raw.githubusercontent.com/open-webui/computer/main/cptr/frontend/static/icon-192.png</Icon>
+  <WebUI>http://[IP]:[PORT:8000]/</WebUI>
+  <Overview>Community build of Open WebUI Computer with direct-browser patches and optional Bonsai integration. See repository for limitations.</Overview>
+  <Category>Productivity:</Category>
+  <ExtraParams>--shm-size=512m --cap-drop=ALL --security-opt=no-new-privileges:true</ExtraParams>
+  <Config Name="WebUI" Target="8000" Default="3082" Mode="tcp" Description="WebUI" Type="Port" Display="always" Required="true" Mask="false">3082</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/selfwebui" Mode="rw" Description="Data" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/selfwebui</Config>
+</Container>

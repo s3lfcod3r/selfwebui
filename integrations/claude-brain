@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+import os,sys
+os.environ['MCP_TOOL_TIMEOUT']='1650000'
+os.environ['CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT']='0'
+os.execv('/usr/local/bin/claude',['claude',*sys.argv[1:],'--tools','','--strict-mcp-config','--mcp-config','/data/brain/claude-mcp.json','--append-system-prompt-file','/data/brain/instructions.md'])
