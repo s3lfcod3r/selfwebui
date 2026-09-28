@@ -32,6 +32,20 @@ Existing `/data` configuration is preserved; no credentials are shipped. For a f
 
 ## Development
 
+## Planner / worker setup
+
+After restoring your existing worker credentials and bridge, run inside the container:
+
+```sh
+RTX_BASE_URL=http://YOUR-MODEL-SERVER:8085/v1 python /opt/selfwebui/scripts/configure_brains.py
+```
+
+Then restart Computer to refresh its configuration caches. The opt-in script preserves other connections and registers `RTX2000/bonsai-2-27b` (override `RTX_MODEL` if needed). ChatGPT and Claude use the existing planner wrappers and external RTX worker. The local RTX planner uses Computer's real child chats through `delegate_task`; each child has its own context and calls the existing Bonsai worker bridge. Child chats cannot recursively delegate. Jobs are sequential, background delegation is disabled, and direct local filesystem/shell tools are disabled for this local model. These are separate contexts on one GPU, not extra GPU instances. Existing child-chat tool approval behavior is inherited from Computer.
+
+The script requires `/data/brain/worker.key` and `/data/brain/bonsai_mcp.py`; it does not create or publish secrets. A backup before changing configuration is recommended. The worker API and model server are separate existing services.
+
+## Build locally
+
 `docker build -t selfwebui:test .`
 
 The build runs the patch regression test. Runtime settings, accounts, chats, SSH keys and model credentials must never be committed. See [NOTICE.md](NOTICE.md) for upstream attribution.
