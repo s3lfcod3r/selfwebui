@@ -3,11 +3,12 @@
   const host = document.createElement('div'); host.id = 'selfwebui-worker';
   host.style.cssText = 'position:fixed;right:16px;bottom:14px;z-index:90;font:13px system-ui;color:#e8edf3';
   const shadow = host.attachShadow({mode:'open'});
-  shadow.innerHTML = `<style>button{font:inherit;color:inherit;cursor:pointer;border:1px solid #3d5262;border-radius:10px;background:#14212b;padding:9px 13px}section{width:300px;max-height:45vh;overflow:auto;background:#111b24;border:1px solid #3d5262;border-radius:12px;padding:14px;margin-bottom:8px;box-shadow:0 8px 28px #0008}p{margin:8px 0;color:#acbac9}.job{border-top:1px solid #32404b;padding:9px 0;line-height:1.6}.muted{font-size:11px;color:#9aabba}[hidden]{display:none}</style><section hidden><strong>RTX2000 · Arbeiter</strong><p>Alle Arbeiteraufträge dieser Installation</p><div id="jobs"></div><p class="muted">Token/s: Messung des Modellservers, einschließlich Denktokens. Werkzeug- und Wartezeiten zählen nicht zur Rate.</p></section><button type="button" aria-expanded="false">RTX2000 · Status laden</button>`;
+  shadow.innerHTML = `<style>button{font:inherit;color:inherit;cursor:pointer;border:1px solid #3d5262;border-radius:10px;background:#14212b;padding:9px 13px}section{width:380px;max-width:85vw;max-height:45vh;overflow:auto;background:#111b24;border:1px solid #3d5262;border-radius:12px;padding:14px;margin-bottom:8px;box-shadow:0 8px 28px #0008}p{margin:8px 0;color:#acbac9}.job{border-top:1px solid #32404b;padding:9px 0;line-height:1.6}.muted{font-size:11px;color:#9aabba}[hidden]{display:none}</style><section hidden><strong>RTX2000 · Arbeiter</strong><p>Alle Arbeiteraufträge dieser Installation</p><div id="jobs"></div><p class="muted">Token/s: Messung des Modellservers, einschließlich Denktokens. Werkzeug- und Wartezeiten zählen nicht zur Rate.</p></section><button type="button" aria-expanded="false">RTX2000 · Status laden</button>`;
   document.body.append(host);
   const button = shadow.querySelector('button'), panel = shadow.querySelector('section'), list = shadow.querySelector('#jobs');
   button.onclick = () => {panel.hidden = !panel.hidden;button.setAttribute('aria-expanded',String(!panel.hidden));};
   const phases = {waiting:'Übergabe',starting:'Startet',prompt:'Liest Kontext',generating:'Erzeugt Tokens',evaluating:'Prüft Antwort',tool:'Werkzeug läuft',fertig:'Abgeschlossen',erledigt:'Abgeschlossen',gescheitert:'Fehlgeschlagen',bonsai_beschaeftigt:'Belegt',bonsai_nicht_verfuegbar:'Nicht verfügbar',unknown:'Status unbekannt'};
+  const expanded = new Set();
   const terminal = new Set(['fertig','erledigt','gescheitert','bonsai_beschaeftigt','bonsai_nicht_verfuegbar']);
   function label(job) {return job.stale ? 'Keine aktuellen Messwerte' : phases[job.phase] || 'Unbekannt';}
   async function poll() {
@@ -26,8 +27,10 @@
         const item=document.createElement('div');item.className='job';
         const seconds=Math.max(0,Math.round((job.ended||Date.now()/1000)-(job.started||Date.now()/1000)));
         const rate=terminal.has(job.phase)?job.last_tps:job.tps;
-        item.textContent=`${label(job)} · ${seconds}s\n${job.tokens||0} Tokens · ${Number.isFinite(rate)?rate.toFixed(1)+' Token/s':'Rate noch nicht verfügbar'} · ${job.tools||0} Werkzeuge`;
-        item.style.whiteSpace='pre-line';list.append(item);
+        item.textContent=`${job.projekt?job.projekt+' · ':''}${job.schritt?'Schritt '+job.schritt+'/'+job.gesamt+' · ':''}${job.titel||'RTX-Arbeiterauftrag'}\n${label(job)} · ${seconds}s\n${job.tokens||0} Tokens · ${Number.isFinite(rate)?rate.toFixed(1)+' Token/s':'Rate noch nicht verfügbar'} · ${job.tools||0} Werkzeuge`;
+        item.style.whiteSpace='pre-line';
+        if(job.bericht){const details=document.createElement('details'),heading=document.createElement('summary'),body=document.createElement('div');heading.textContent='Ergebnis ansehen';body.textContent=job.bericht;body.style.cssText='max-height:240px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere';details.open=expanded.has(job.id);details.ontoggle=()=>{if(details.open)expanded.add(job.id);else expanded.delete(job.id);};details.append(heading,body);item.append(details);}
+        list.append(item);
       }
     } catch {button.textContent='RTX2000 · Status nicht erreichbar';}
     finally {setTimeout(poll,1000);}

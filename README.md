@@ -67,3 +67,9 @@ The worker receives visible text and element references, with form values omitte
 ## SelfDashboard widgets
 
 The optional [dashboard adapter](dashboard/README.md) replaces the old OpenClaw token collector and project-status service. It preserves token history and existing widget URLs, and reads current RTX telemetry and STATUS.md files. It runs separately with read-only project mounts; it does not require OpenClaw or access to credentials.
+
+## Sequential RTX tasks
+
+The existing `bonsai_auftrag` tool accepts `titel` and `projekt` for named work items. For a fixed plan, add `teilauftraege: [{"titel":"...","auftrag":"..."}, ...]` (1–12 steps). The bridge invokes the worker sequentially with fresh model contexts, forwards bounded prior results, and stops on an unsuccessful step. Adaptive reviews should use individual named calls so the planner can evaluate evidence before deciding the next scope. An unrelated busy worker still returns busy; it is not silently duplicated.
+
+The admin-only RTX panel displays each task name, project, step number, telemetry and an expandable worker report. Reports are claims from the worker, not independent verification. This is a task list; cloud-planned steps do not create native Computer child-chat tabs. The RTX planner can additionally use Computer's native `delegate_task` child chats. Install the current MCP bridge into persistent `/data/brain` and append `integrations/task_workflow.md` to planner instructions when upgrading an existing installation. Running sessions retain their already-loaded tool schema until a new session starts.

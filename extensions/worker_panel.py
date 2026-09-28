@@ -1,4 +1,4 @@
-"""Admin-only, content-free worker telemetry for Computer."""
+"""Admin-only worker telemetry and explicitly requested task reports."""
 import json
 import math
 import time
@@ -18,6 +18,10 @@ def summary(raw, now):
         value = raw.get(key)
         if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0:
             clean[key] = value
+    for key in ['titel','projekt','plan']:
+        if isinstance(raw.get(key),str):clean[key]=raw[key][:100]
+    for key in ['schritt','gesamt']:
+        if isinstance(raw.get(key),int) and 1<=raw[key]<=12:clean[key]=raw[key]
     clean['stale'] = now - clean.get('updated', 0) > 15 and clean['phase'] not in TERMINAL
     return clean
 
@@ -26,7 +30,7 @@ async def status(request: Request):
     require_admin(request)
     now = time.time()
     jobs = []
-    # No prompts, model outputs, host paths or credentials enter the response.
+    # Telemetry is allowlisted; separate task reports are visible to administrators only.
     for path in sorted(ROOT.glob('*/*.json'), key=lambda p: p.stat().st_mtime, reverse=True)[:20]:
         try:
             if path.stat().st_size > 32768:
@@ -35,6 +39,9 @@ async def status(request: Request):
             if now - raw.get('updated', 0) <= 86400:
                 item = summary(raw, now)
                 item['id'] = path.stem[:32]
+                report=path.with_suffix('.result')
+                if report.is_file() and report.stat().st_size<200000:
+                    item['bericht']=str(json.loads(report.read_text()).get('bericht',''))[:16000]
                 jobs.append(item)
         except (OSError, ValueError, TypeError):
             continue
