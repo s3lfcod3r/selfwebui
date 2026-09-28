@@ -12,7 +12,7 @@ from cptr.routers.admin import require_admin
 
 router = APIRouter(prefix='/api/selfwebui')
 ROOT = Path('/data/brain/live')
-TERMINAL = {'fertig', 'erledigt', 'gescheitert', 'bonsai_beschaeftigt', 'bonsai_nicht_verfuegbar'}
+TERMINAL = {'fertig', 'erledigt', 'teilweise', 'gescheitert', 'bonsai_beschaeftigt', 'bonsai_nicht_verfuegbar'}
 PHASES = {'waiting', 'starting', 'prompt', 'generating', 'evaluating', 'tool'} | TERMINAL
 
 def summary(raw, now):

@@ -7,9 +7,9 @@
   document.body.append(host);
   const button = shadow.querySelector('button'), panel = shadow.querySelector('section'), list = shadow.querySelector('#jobs');
   button.onclick = () => {panel.hidden = !panel.hidden;button.setAttribute('aria-expanded',String(!panel.hidden));};
-  const phases = {waiting:'Übergabe',starting:'Startet',prompt:'Liest Kontext',generating:'Erzeugt Tokens',evaluating:'Prüft Antwort',tool:'Werkzeug läuft',fertig:'Abgeschlossen',erledigt:'Abgeschlossen',gescheitert:'Fehlgeschlagen',bonsai_beschaeftigt:'Belegt',bonsai_nicht_verfuegbar:'Nicht verfügbar',unknown:'Status unbekannt'};
+  const phases = {waiting:'Übergabe',starting:'Startet',prompt:'Liest Kontext',generating:'Erzeugt Tokens',evaluating:'Prüft Antwort',tool:'Werkzeug läuft',fertig:'Abgeschlossen',erledigt:'Abgeschlossen',teilweise:'Teilweise abgeschlossen',gescheitert:'Fehlgeschlagen',bonsai_beschaeftigt:'Belegt',bonsai_nicht_verfuegbar:'Nicht verfügbar',unknown:'Status unbekannt'};
   const expanded = new Set();
-  const terminal = new Set(['fertig','erledigt','gescheitert','bonsai_beschaeftigt','bonsai_nicht_verfuegbar']);
+  const terminal = new Set(['fertig','erledigt','teilweise','gescheitert','bonsai_beschaeftigt','bonsai_nicht_verfuegbar']);
   function label(job) {return job.stale ? 'Keine aktuellen Messwerte' : phases[job.phase] || 'Unbekannt';}
   async function poll() {
     try {

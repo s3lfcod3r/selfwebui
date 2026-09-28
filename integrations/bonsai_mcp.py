@@ -14,6 +14,8 @@ def request(path,data=None):
 
 def call(args):
     if not isinstance(args,dict):raise ValueError('Objekt erwartet')
+    if args.get('aktion')=='werkzeuge':
+        return {'content':[{'type':'text','text':json.dumps(request('/bonsai_tools'),ensure_ascii=False)}],'isError':False}
     if args.get('aktion')=='liste':
         records=request('/bonsai_jobs').get('jobs',[])
         items=[{k:r.get(k) for k in ['job_id','titel','projekt','phase','done','schritt','gesamt','started','updated']} for r in records]
@@ -42,20 +44,24 @@ def call(args):
     return {'content':[{'type':'text','text':json.dumps(state,ensure_ascii=False)}], 'isError':bool(state.get('done') and state.get('phase') not in ['fertig','erledigt'])}
 
 SCHEMA.pop('required',None)
-SCHEMA['properties']['aktion']={'type':'string','enum':['liste'],'description':'Gespeicherte Aufträge auflisten, wenn die job_id fehlt. Startet keine Arbeit.'}
+SCHEMA['properties']['aktion']={'type':'string','enum':['liste','werkzeuge'],'description':'liste: gespeicherte Aufträge finden. werkzeuge: erlaubte Werkzeugnamen und Argumentschemas abrufen. Beides führt keine Arbeit aus.'}
 SCHEMA['properties']['job_id']={'type':'string','description':'Gespeicherten Auftrag und Ergebnis mit dieser ID abfragen. Dabei keinen neuen Auftrag starten.'}
 SCHEMA['properties'].update({
  'titel':{'type':'string','description':'Kurzer sichtbarer Titel dieses abgegrenzten Arbeiterauftrags; keine Geheimnisse.'},
  'projekt':{'type':'string','description':'Gemeinsamer Projektname für zusammengehörige Teilaufträge.'},
  'teilauftraege':{'type':'array','minItems':1,'maxItems':12,'description':'Optionaler fester Arbeitsplan. Schritte laufen nacheinander in frischen Arbeiterkontexten; Fehler stoppt den Plan. Für adaptive Prüfungen einzelne Aufträge mit titel/projekt senden.','items':{'type':'object','required':['titel','auftrag'],'properties':{'titel':{'type':'string'},'auftrag':{'type':'string'}}}}
 })
+CALL_SCHEMA={'type':'array','maxItems':40,'description':'Feste Aufrufe einmal in Reihenfolge ausführen. Exakte Argumente vom Planer. Ohne Liste nur RTX-Analyse, keine Werkzeuge. Vorher aktion=werkzeuge für Schemas nutzen.','items':{'type':'object','required':['werkzeug','argumente'],'additionalProperties':False,'properties':{'werkzeug':{'type':'string'},'argumente':{'type':'object'}}}}
+SCHEMA['properties']['erlaubte_aufrufe']=CALL_SCHEMA
+SCHEMA['properties']['max_werkzeugaufrufe']={'type':'integer','minimum':1,'maximum':40,'default':8}
+SCHEMA['properties']['teilauftraege']['items']['properties'].update({'erlaubte_aufrufe':CALL_SCHEMA,'max_werkzeugaufrufe':SCHEMA['properties']['max_werkzeugaufrufe']})
 for line in sys.stdin:
     try:
         msg=json.loads(line); method=msg.get('method'); ident=msg.get('id')
         if ident is None: continue
         if method=='initialize': result={'protocolVersion':msg.get('params',{}).get('protocolVersion','2024-11-05'),'capabilities':{'tools':{}},'serverInfo':{'name':'bonsai-arbeiter','version':'1.0.0'}}
         elif method=='ping': result={}
-        elif method=='tools/list': result={'tools':[{'name':'bonsai_auftrag','description':'Delegiere Ausarbeitung, Recherche, Code und Ausfuehrung an Bonsai auf der RTX 2000E Ada. Startet einen dauerhaft gespeicherten Auftrag und liefert sofort seine job_id. Solange done=false ist, mit job_id wiederholt abfragen; nicht neu starten und nicht als erledigt melden. Nur ein Auftrag gleichzeitig. Pruefe den Bericht und das Werkzeugprotokoll. Bei Ausfall nicht selbst ausfuehren.','inputSchema':SCHEMA}]}
+        elif method=='tools/list': result={'tools':[{'name':'bonsai_auftrag','description':'Fester Ausführungsplan: erlaubte_aufrufe werden einmal ausgeführt, danach analysiert RTX ohne Werkzeugschleife. Ohne erlaubte_aufrufe nur Analyse des Kontexts. Werkzeugschemas mit aktion=werkzeuge abrufen. Startet einen dauerhaft gespeicherten Auftrag und liefert sofort seine job_id. Solange done=false ist, mit job_id wiederholt abfragen; nicht neu starten und nicht als erledigt melden. Nur ein Auftrag gleichzeitig. Pruefe den Bericht und das Werkzeugprotokoll. Bei Ausfall nicht selbst ausfuehren.','inputSchema':SCHEMA}]}
         elif method=='tools/call':
             p=msg.get('params',{})
             if p.get('name')!='bonsai_auftrag': raise ValueError('Unbekanntes Werkzeug')

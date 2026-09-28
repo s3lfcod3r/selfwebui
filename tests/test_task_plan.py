@@ -1,7 +1,7 @@
 import unittest,runpy,io,sys,json,tempfile,time,threading
 from pathlib import Path
 from unittest.mock import patch
-sys.path.insert(0,'/opt/selfwebui/integrations')
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'integrations'))
 import durable_jobs as jobs
 class DurableTests(unittest.TestCase):
  def setUp(self):
@@ -40,7 +40,7 @@ class DurableTests(unittest.TestCase):
 class BridgeTests(unittest.TestCase):
  def test_start_returns_job_and_later_query_gets_saved_result(self):
   with patch.object(Path,'read_text',return_value='test-key'),patch.object(sys,'stdin',io.StringIO('')):
-   bridge=runpy.run_path('/opt/selfwebui/integrations/bonsai_mcp.py')
+   bridge=runpy.run_path(str(Path(__file__).resolve().parents[1]/'integrations/bonsai_mcp.py'))
   call=bridge['call'];requests=[]
   def transport(path,data=None):
    requests.append((path,data))
