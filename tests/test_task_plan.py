@@ -38,6 +38,15 @@ class DurableTests(unittest.TestCase):
   with self.assertRaises(ValueError):jobs.start({'auftrag':'test','teilauftraege':[{}]},lambda d:{})
   with self.assertRaises(ValueError):jobs.path('../secret')
 class BridgeTests(unittest.TestCase):
+ def test_rejected_plan_is_not_reported_as_running_or_unknown(self):
+  import urllib.error
+  with patch.object(Path,'read_text',return_value='test-key'),patch.object(sys,'stdin',io.StringIO('')):
+   bridge=runpy.run_path(str(Path(__file__).resolve().parents[1]/'integrations/bonsai_mcp.py'))
+  calls=[]
+  def rejected(path,data=None):
+   calls.append(path);raise urllib.error.HTTPError(path,400,'Bad Request',{},None)
+  with patch.dict(bridge['call'].__globals__,request=rejected):result=bridge['call']({'auftrag':'invalid'})
+  self.assertTrue(result['isError']);self.assertIn('abgelehnt',result['content'][0]['text']);self.assertEqual(calls,['/bonsai_start'])
  def test_start_returns_job_and_later_query_gets_saved_result(self):
   with patch.object(Path,'read_text',return_value='test-key'),patch.object(sys,'stdin',io.StringIO('')):
    bridge=runpy.run_path(str(Path(__file__).resolve().parents[1]/'integrations/bonsai_mcp.py'))
@@ -52,4 +61,3 @@ class BridgeTests(unittest.TestCase):
   with patch.dict(call.__globals__,request=completed):second=call({'job_id':state['job_id']})
   self.assertFalse(second['isError']);self.assertIn('persisted',second['content'][0]['text'])
 if __name__=='__main__':unittest.main()
-

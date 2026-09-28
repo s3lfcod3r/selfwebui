@@ -27,7 +27,9 @@ def call(args):
         job=uuid.uuid4().hex
         data={**args,'job_id':job}
         try:state=request('/bonsai_start',data)
-        except OSError:
+        except OSError as error:
+            if isinstance(error,urllib.error.HTTPError) and error.code in [400,401,403,413]:
+                return {'content':[{'type':'text','text':json.dumps({'status':'abgelehnt','http_status':error.code,'hinweis':'Kein Auftrag gestartet. Berechtigung, Werkzeugnamen, exakte Argumente, Budget und doppelte Aufrufe prüfen; korrigierten Plan senden.'},ensure_ascii=False)}],'isError':True}
             # An ambiguous POST must never create a second execution.
             try:state=request('/bonsai_result?job_id='+job)
             except OSError:return {'content':[{'type':'text','text':json.dumps({'job_id':job,'status':'unbekannt','hinweis':'Startantwort unterbrochen. Mit dieser job_id erneut abfragen; Auftrag nicht neu starten.'},ensure_ascii=False)}],'isError':True}
