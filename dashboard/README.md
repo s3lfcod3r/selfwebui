@@ -21,3 +21,5 @@ Project states come from existing files, not guesses about chat text. A complete
 Run `python test_dashboard.py` for counter deduplication, reset handling and separation of historical agent totals.
 
 Project rows are rebuilt from disk on every request. Removing a project directory or its STATUS.md removes the row on the next widget refresh; deleting a question from STATUS.md removes that question. Archived status files outside the configured roots are not displayed. Deleting a chat is separate from deleting a project status file.
+
+With durable jobs installed, also mount the existing worker key read-only at `/run/worker.key`, readable by the adapter UID, and connect to the worker Docker network. The project status endpoint queries authenticated durable telemetry directly. Do not copy key contents into configuration, the image or this repository.

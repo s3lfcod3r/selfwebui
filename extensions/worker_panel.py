@@ -66,7 +66,8 @@ async def status(request: Request):
                     item.update(phase='gescheitert',bericht=plan['error'],stale=False)
                 jobs=[j for j in jobs if j['id']!=item['id']];jobs.append(item)
         jobs.sort(key=lambda j:j.get('started',0),reverse=True)
-    except (OSError,ValueError):pass
+    except (OSError,ValueError):
+        return JSONResponse({'error':'worker_unreachable'},status_code=503,headers={'Cache-Control':'no-store'})
     return JSONResponse({'jobs': jobs[:30], 'scope': 'all-worker-jobs'}, headers={'Cache-Control': 'no-store'})
 
 @router.get('/worker/panel.js')
