@@ -63,3 +63,7 @@ python install_worker_bridge.py --app-dir /PATH/TO/WORKER/app --config-dir /PATH
 Set `direct-browser.json` ownership to the worker service UID (99:100 for the existing Unraid service), preserve mode 600, and restart the worker. Both containers must share a Docker network. This installer patches only the supported existing `browser_tools.py`; it is not a replacement worker service. Disable the relay by moving `direct-browser.json` aside and restarting the worker; the original browser implementation remains present.
 
 The worker receives visible text and element references, with form values omitted. Clicks and text entry still require the worker job's interactive flag. Credential entry remains manual. Screenshots of this local HTML view are unsupported by the server; the worker returns an explicit explanation rather than an image from another session. Modern web applications can still have proxy compatibility limitations.
+
+## SelfDashboard widgets
+
+The optional [dashboard adapter](dashboard/README.md) replaces the old OpenClaw token collector and project-status service. It preserves token history and existing widget URLs, and reads current RTX telemetry and STATUS.md files. It runs separately with read-only project mounts; it does not require OpenClaw or access to credentials.
