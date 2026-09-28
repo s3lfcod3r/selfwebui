@@ -31,7 +31,7 @@ def project_status():
         phase=latest.get('phase');updated=latest.get('updated',0)
         terminal=phase in ['fertig','erledigt']
         stale=time.time()-updated>30 and not terminal
-        state='fertig' if terminal else ('wartet' if stale or phase in ['gescheitert','bonsai_beschaeftigt','bonsai_nicht_verfuegbar'] else 'in Arbeit')
+        state='fertig' if terminal else ('wartet' if stale or phase in ['teilweise','gescheitert','bonsai_beschaeftigt','bonsai_nicht_verfuegbar'] else 'in Arbeit')
         info=('Letzter Auftrag abgeschlossen' if terminal else 'Kein aktuelles Aktivitätssignal' if stale else 'Arbeiterstatus: '+str(phase))
         result['projekte'].insert(0,{'name':'SelfWebUI · RTX-Arbeiter','geaendert':datetime.fromtimestamp(updated,timezone.utc).isoformat(),
             'fragen':[], 'aufgaben':[{'name':'Arbeiterauftrag','zustand':state,'text':info}]})
