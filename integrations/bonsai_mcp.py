@@ -5,7 +5,7 @@ import threading,time,uuid,hashlib
 from pathlib import Path
 BASE=os.environ.get('BONSAI_WORKER_URL','http://OpenWebUI-Werkzeuge:8000').rstrip('/')
 KEY=Path(os.environ.get('BONSAI_WORKER_KEY_FILE','/data/brain/worker.key')).read_text().strip()
-SCHEMA={'type':'object','required':['auftrag'],'properties':{'browser_interaktiv':{'type':'boolean','description':'Nur true bei ausdrÃ¼cklich beauftragten Webseiten-Ã„nderungen.'},'auftrag':{'type':'string','description':'Eigenstaendiger Auftrag mit Ziel und erwarteten Ergebnissen. Veraenderungen nur mit Nutzerauftrag.'},'kontext':{'type':'string','description':'Relevanter Kontext, Pfade, Hosts und Einschraenkungen.'},'denken':{'type':'string','enum':['aus','wenig','mittel','viel']}}}
+SCHEMA={'type':'object','required':['auftrag'],'properties':{'browser_interaktiv':{'type':'boolean','description':'Nur true bei ausdrücklich beauftragten Webseiten-Änderungen.'},'auftrag':{'type':'string','description':'Eigenstaendiger Auftrag mit Ziel und erwarteten Ergebnissen. Veraenderungen nur mit Nutzerauftrag.'},'kontext':{'type':'string','description':'Relevanter Kontext, Pfade, Hosts und Einschraenkungen.'},'denken':{'type':'string','enum':['aus','wenig','mittel','viel']}}}
 def send(x):
     print(json.dumps(x,ensure_ascii=False),flush=True)
 def request(path,data=None):
@@ -26,7 +26,7 @@ def call(args):
             try:state=request('/bonsai_result?job_id='+job)
             except OSError:return {'content':[{'type':'text','text':json.dumps({'job_id':job,'status':'unbekannt','hinweis':'Startantwort unterbrochen. Mit dieser job_id erneut abfragen; Auftrag nicht neu starten.'},ensure_ascii=False)}],'isError':True}
         if state.get('status')=='bonsai_beschaeftigt':return {'content':[{'type':'text','text':json.dumps(state,ensure_ascii=False)}],'isError':True}
-    if not isinstance(job,str) or len(job)!=32 or any(c not in '0123456789abcdef' for c in job):raise ValueError('UngÃ¼ltige job_id')
+    if not isinstance(job,str) or len(job)!=32 or any(c not in '0123456789abcdef' for c in job):raise ValueError('Ungültige job_id')
     state=request('/bonsai_result?job_id='+job)
     deadline=time.monotonic()+15
     while existing and not state.get('done') and time.monotonic()<deadline:
@@ -34,15 +34,15 @@ def call(args):
         state=request('/bonsai_result?job_id='+job)
     if not state.get('done'):
         state['steps']=[{k:v for k,v in step.items() if k!='result'} for step in state.get('steps',[])]
-        state['hinweis']='Auftrag lÃ¤uft unabhÃ¤ngig weiter und speichert sein Ergebnis. Mit bonsai_auftrag und job_id denselben Auftrag erneut abfragen. Nicht erneut starten. Noch keinen nÃ¤chsten abhÃ¤ngigen Auftrag ausfÃ¼hren.'
+        state['hinweis']='Auftrag läuft unabhängig weiter und speichert sein Ergebnis. Mit bonsai_auftrag und job_id denselben Auftrag erneut abfragen. Nicht erneut starten. Noch keinen nächsten abhängigen Auftrag ausführen.'
     return {'content':[{'type':'text','text':json.dumps(state,ensure_ascii=False)}], 'isError':bool(state.get('done') and state.get('phase') not in ['fertig','erledigt'])}
 
 SCHEMA.pop('required',None)
 SCHEMA['properties']['job_id']={'type':'string','description':'Gespeicherten Auftrag und Ergebnis mit dieser ID abfragen. Dabei keinen neuen Auftrag starten.'}
 SCHEMA['properties'].update({
  'titel':{'type':'string','description':'Kurzer sichtbarer Titel dieses abgegrenzten Arbeiterauftrags; keine Geheimnisse.'},
- 'projekt':{'type':'string','description':'Gemeinsamer Projektname fÃ¼r zusammengehÃ¶rige TeilauftrÃ¤ge.'},
- 'teilauftraege':{'type':'array','minItems':1,'maxItems':12,'description':'Optionaler fester Arbeitsplan. Schritte laufen nacheinander in frischen Arbeiterkontexten; Fehler stoppt den Plan. FÃ¼r adaptive PrÃ¼fungen einzelne AuftrÃ¤ge mit titel/projekt senden.','items':{'type':'object','required':['titel','auftrag'],'properties':{'titel':{'type':'string'},'auftrag':{'type':'string'}}}}
+ 'projekt':{'type':'string','description':'Gemeinsamer Projektname für zusammengehörige Teilaufträge.'},
+ 'teilauftraege':{'type':'array','minItems':1,'maxItems':12,'description':'Optionaler fester Arbeitsplan. Schritte laufen nacheinander in frischen Arbeiterkontexten; Fehler stoppt den Plan. Für adaptive Prüfungen einzelne Aufträge mit titel/projekt senden.','items':{'type':'object','required':['titel','auftrag'],'properties':{'titel':{'type':'string'},'auftrag':{'type':'string'}}}}
 })
 for line in sys.stdin:
     try:

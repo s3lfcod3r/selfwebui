@@ -8,7 +8,7 @@ telemetry_reader=lambda job: {}
 TERMINAL={'fertig','erledigt','gescheitert','bonsai_beschaeftigt','bonsai_nicht_verfuegbar'}
 
 def path(job):
-    if not isinstance(job,str) or not re.fullmatch('[0-9a-f]{32}',job):raise ValueError('UngÃ¼ltige Auftrags-ID')
+    if not isinstance(job,str) or not re.fullmatch('[0-9a-f]{32}',job):raise ValueError('Ungültige Auftrags-ID')
     return ROOT/(job+'.json')
 
 def save(record):
@@ -34,7 +34,7 @@ def start(data,runner):
     if not isinstance(data,dict) or not isinstance(data.get('auftrag'),str) or not data['auftrag'].strip():raise ValueError('auftrag fehlt')
     steps=data.get('teilauftraege')
     if steps is None:steps=[{'titel':str(data.get('titel','RTX-Arbeiterauftrag'))[:100],'auftrag':data['auftrag']}]
-    if not isinstance(steps,list) or not 1<=len(steps)<=12:raise ValueError('1 bis 12 TeilauftrÃ¤ge erforderlich')
+    if not isinstance(steps,list) or not 1<=len(steps)<=12:raise ValueError('1 bis 12 Teilaufträge erforderlich')
     for s in steps:
         if not isinstance(s,dict) or not all(isinstance(s.get(k),str) and s[k].strip() for k in ['titel','auftrag']):raise ValueError('titel und auftrag erforderlich')
     job=data.get('job_id') or uuid.uuid4().hex;target=path(job)
@@ -42,11 +42,11 @@ def start(data,runner):
     with _lock:
         if target.exists():
             old=load(job)
-            if old['request_hash']!=digest:raise ValueError('Auftrags-ID gehÃ¶rt zu einem anderen Auftrag')
+            if old['request_hash']!=digest:raise ValueError('Auftrags-ID gehört zu einem anderen Auftrag')
             return {'job_id':job,'phase':old['phase']}
         if _active:return {'status':'bonsai_beschaeftigt','job_id':_active,'hinweis':'Vorhandenen Auftrag abfragen; keinen zweiten starten.'}
         now=time.time()
-        record={'job_id':job,'request_hash':digest,'titel':str(data.get('titel','RTX-TeilauftrÃ¤ge'))[:100],'projekt':str(data.get('projekt',''))[:100], 'phase':'waiting','started':now,'updated':now,'schritt':0,'gesamt':len(steps),'steps':[]}
+        record={'job_id':job,'request_hash':digest,'titel':str(data.get('titel','RTX-Teilaufträge'))[:100],'projekt':str(data.get('projekt',''))[:100], 'phase':'waiting','started':now,'updated':now,'schritt':0,'gesamt':len(steps),'steps':[]}
         save(record);_active=job
         threading.Thread(target=run,args=(job,data,steps,runner),daemon=True).start()
         return {'job_id':job,'phase':'waiting'}
