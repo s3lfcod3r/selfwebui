@@ -1,0 +1,33 @@
+"""Build-time native split patch; fail closed when upstream anchors change."""
+from pathlib import Path
+import sys
+root=Path(sys.argv[1]);assets=Path(__file__).resolve().parents[1]/'frontend'
+def edit(relative,fn):
+ p=root/relative;s=p.read_text(encoding='utf-8');p.write_text(fn(s),encoding='utf-8',newline='\n')
+def replace(s,a,b,count=1):
+ if s.count(a)!=count:raise SystemExit('Frontend anchor changed: '+a[:100])
+ return s.replace(a,b)
+def stores(s):
+ s=replace(s,"| 'browser'; // preview", "| 'browser' | 'worker-browser'; // preview")
+ # Newer upstream versions also validate persisted tab types.
+ if "\n\t'browser'\n" in s:s=s.replace("\n\t'browser'\n","\n\t'browser',\n\t'worker-browser'\n")
+ return s+'\n'+(assets/'worker-split.ts').read_text(encoding='utf-8')
+edit('src/lib/stores.ts',stores)
+def bar(s):
+ s=replace(s,'\t\topenBrowserTab,','\t\topenBrowserTab,\n\t\topenWorkerBrowserSplit,')
+ s=replace(s,"\t\t\tcase 'browser':", "\t\t\tcase 'worker-browser':\n\t\t\tcase 'browser':")
+ anchor='\tconst splitMenuItems = $derived.by(() => {'
+ before,after=s.split(anchor)
+ after=replace(after,'\t\treturn [','\t\treturn [\n\t\t\t{label: "Arbeiter-Browser rechts", icon: "browser", onclick: () => openWorkerBrowserSplit(group.id,home)},',1)
+ s=before+anchor+after
+ anchor='\t\t<!-- Split button (wide screens) -->'
+ return replace(s,anchor,'\t\t<button class="flex items-center justify-center w-7 h-7 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" aria-label="Arbeiter-Browser rechts öffnen" title="Arbeiter-Browser rechts" onclick={() => openWorkerBrowserSplit(group.id,home)}><Icon name="browser" size={14} /></button>\n'+anchor)
+edit('src/lib/components/GroupTabBar.svelte',bar)
+def page(s):
+ for group in ['homePane','group']:
+  anchor="{#each "+group+".tabs.filter((tab) => tab.type === 'browser' && tab.browserSessionId) as tab (tab.id)}"
+  block="{#each "+group+".tabs.filter((tab) => tab.type === 'worker-browser') as tab (tab.id)}\n<div class=\"persisted-tab\" class:persisted-tab-hidden={tab.id !== "+group+".activeTabId}><div data-selfwebui-browser-slot={tab.id} style=\"width:100%;height:100%;min-width:0;min-height:0\"></div></div>\n{/each}\n"
+  s=replace(s,anchor,block+anchor)
+ return s
+edit('src/routes/+page.svelte',page)
+print('Native worker-browser tabs and split actions installed')

@@ -1,9 +1,9 @@
 (() => {
   if (window.top !== window || document.getElementById('selfwebui-browser')) return;
   const host=document.createElement('div');host.id='selfwebui-browser';
-  host.style.cssText='position:fixed;right:16px;top:80px;z-index:80;color:#e8edf3;font:13px system-ui';
+  host.hidden=true;host.style.cssText='position:fixed;z-index:35;color:var(--app-fg,#e8edf3);font:13px system-ui';
   const s=host.attachShadow({mode:'open'});
-  s.innerHTML=`<style>button,input{font:inherit;color:inherit;border:1px solid #435566;border-radius:8px;background:#14212b;padding:8px;box-sizing:border-box}button{cursor:pointer}section{width:min(900px,80vw);height:75vh;resize:both;overflow:hidden;min-width:360px;min-height:300px;background:#111b24;border:1px solid #435566;border-radius:10px;box-shadow:0 8px 28px #0009}header{display:flex;gap:6px;padding:8px;flex-wrap:wrap}input{flex:1;min-width:160px}iframe{width:100%;height:calc(100% - 90px);border:0;background:white}p{margin:0;padding:6px 10px;color:#acbac9}[hidden]{display:none}</style><button id="toggle">Arbeiter-Browser</button><section hidden><header><input aria-label="Browseradresse" placeholder="https://…"><button id="go">Öffnen</button><button id="connect">Arbeiter verbinden</button><button id="close">Schließen</button></header><p id="status">Direktes HTML · Du bedienst den Browser</p><iframe title="Direkter Arbeiter-Browser" sandbox="allow-scripts allow-forms allow-same-origin allow-downloads"></iframe></section>`;
+  s.innerHTML=`<style>button,input{font:inherit;color:inherit;border:1px solid #435566;border-radius:8px;background:#14212b;padding:8px;box-sizing:border-box}button{cursor:pointer}section{display:flex;flex-direction:column;width:100%;height:100%;overflow:hidden;min-width:0;min-height:0;background:var(--app-bg,#111b24)}header{display:flex;gap:6px;padding:8px;flex-wrap:wrap}input{flex:1;min-width:160px}iframe{display:block;width:100%;flex:1;min-height:0;border:0;background:white}header{border-bottom:1px solid #435566}#toggle{display:none}#close{display:none}p{margin:0;padding:6px 10px;color:#acbac9}[hidden]{display:none}</style><button id="toggle">Arbeiter-Browser</button><section hidden><header><input aria-label="Browseradresse" placeholder="https://…"><button id="go">Öffnen</button><button id="connect">Arbeiter verbinden</button><button id="close">Schließen</button></header><p id="status">Direktes HTML · Du bedienst den Browser</p><iframe title="Direkter Arbeiter-Browser" sandbox="allow-scripts allow-forms allow-same-origin allow-downloads"></iframe></section>`;
   document.body.append(host);
   const panel=s.querySelector('section'),frame=s.querySelector('iframe'),address=s.querySelector('input'),status=s.querySelector('#status'),connect=s.querySelector('#connect');
   let session=null,token=null,revision=0,refs=new Map(),busy=false;
@@ -64,8 +64,8 @@
     await new Promise(r=>setTimeout(r,300));return read();
   }
   async function disconnect() {if(token){const old=token;token=null;await api('/api/selfwebui/browser/disconnect',{token:old}).catch(()=>{});}connect.textContent='Arbeiter verbinden';status.textContent='Direktes HTML · Du bedienst den Browser';frame.style.pointerEvents='auto';}
-  s.querySelector('#toggle').onclick=()=>{panel.hidden=!panel.hidden;if(panel.hidden)disconnect();};
-  s.querySelector('#close').onclick=()=>{panel.hidden=true;disconnect();};
+  s.querySelector('#toggle').onclick=()=>window.dispatchEvent(new Event('selfwebui:open-browser'));
+  s.querySelector('#close').onclick=()=>window.dispatchEvent(new Event('selfwebui:close-browser'));
   s.querySelector('#go').onclick=async()=>{await disconnect();try{await open(address.value);}catch(e){status.textContent=e.message;}};
   address.onkeydown=e=>{if(e.key==='Enter')s.querySelector('#go').click();};
   connect.onclick=async()=>{if(token)return disconnect();try{token=(await api('/api/selfwebui/browser/connect',{})).token;connect.textContent='Selbst übernehmen';frame.style.pointerEvents='none';status.textContent='Mit RTX-Arbeiter verbunden · Für manuelle Eingaben zuerst übernehmen';}catch(e){status.textContent=e.message;}};
@@ -78,5 +78,24 @@
     }catch(e){status.textContent='Verbindung unterbrochen: '+e.message;await disconnect();}
     finally{setTimeout(poll,600);}
   }
+  // Project the same iframe into a native editor slot without reparenting it.
+  // Reparenting an iframe reloads its document and loses transient login/form state.
+  let scheduled=false,wasVisible=false;
+  function align() {
+    scheduled=false;
+    const slots=[...document.querySelectorAll('[data-selfwebui-browser-slot]')];
+    const slot=slots.find(e=>e.getClientRects().length && e.getBoundingClientRect().width>0);
+    if(!slot){host.hidden=true;panel.hidden=true;if(wasVisible && !slots.length)disconnect();wasVisible=false;return;}
+    const r=slot.getBoundingClientRect();
+    const css=`position:fixed;z-index:35;color:var(--app-fg,#e8edf3);font:13px system-ui;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px`;
+    if(host.style.cssText!==css && host.dataset.bounds!==css){host.style.cssText=css;host.dataset.bounds=css;}
+    if(host.hidden)host.hidden=false;if(panel.hidden)panel.hidden=false;wasVisible=true;
+  }
+  function schedule(){if(!scheduled){scheduled=true;requestAnimationFrame(align);}}
+  new MutationObserver(schedule).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style','hidden']});
+  window.addEventListener('resize',schedule);
+  window.addEventListener('pointermove',schedule);
+  window.addEventListener('scroll',schedule,true);
+  schedule();
   poll();
 })();
