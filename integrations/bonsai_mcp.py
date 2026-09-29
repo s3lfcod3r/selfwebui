@@ -3,6 +3,9 @@
 import json,sys,urllib.request,datetime,os
 import threading,time,uuid,hashlib
 from pathlib import Path
+sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)))
+from loop_guard import LoopGuard,normalize,EXAMPLE
+guard=LoopGuard()
 BASE=os.environ.get('BONSAI_WORKER_URL','http://OpenWebUI-Werkzeuge:8000').rstrip('/')
 KEY=Path(os.environ.get('BONSAI_WORKER_KEY_FILE','/data/brain/worker.key')).read_text().strip()
 SCHEMA={'type':'object','required':['auftrag'],'properties':{'browser_interaktiv':{'type':'boolean','description':'Nur true bei ausdrücklich beauftragten Webseiten-Änderungen.'},'auftrag':{'type':'string','description':'Eigenstaendiger Auftrag mit Ziel und erwarteten Ergebnissen. Veraenderungen nur mit Nutzerauftrag.'},'kontext':{'type':'string','description':'Relevanter Kontext, Pfade, Hosts und Einschraenkungen.'},'denken':{'type':'string','enum':['aus','wenig','mittel','viel']}}}
@@ -67,7 +70,18 @@ for line in sys.stdin:
         elif method=='tools/call':
             p=msg.get('params',{})
             if p.get('name')!='bonsai_auftrag': raise ValueError('Unbekanntes Werkzeug')
-            result=call(p.get('arguments',{}))
+            gargs=normalize(p.get('arguments',{}))
+            hint=guard.before(gargs)
+            if hint is not None:
+                result={'content':[{'type':'text','text':hint}],'isError':True}
+                guard.after(gargs,hint,True)
+            else:
+                try:result=call(gargs)
+                except Exception as e:
+                    result={'content':[{'type':'text','text':'Bonsai-Auftrag fehlgeschlagen: %s: %s. %s'%(type(e).__name__,e,EXAMPLE)}],'isError':True}
+                text=result['content'][0]['text']
+                extra=guard.after(gargs,text,bool(result.get('isError')))
+                if extra:result['content'][0]['text']=text+'\n'+extra
         else:
             send({'jsonrpc':'2.0','id':ident,'error':{'code':-32601,'message':'Method not found'}}); continue
         send({'jsonrpc':'2.0','id':ident,'result':result})

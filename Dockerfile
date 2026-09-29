@@ -27,7 +27,7 @@ COPY --from=frontend /source/cptr/frontend/build /tmp/selfwebui-frontend
 RUN python -c "import cptr,pathlib,shutil; shutil.copytree('/tmp/selfwebui-frontend',pathlib.Path(cptr.__file__).parent/'frontend/build',dirs_exist_ok=True)" && rm -rf /tmp/selfwebui-frontend
 RUN python /opt/selfwebui/scripts/patch_runtime.py && node /opt/selfwebui/tests/proxy.cjs "$(python -c 'import cptr,pathlib; print(pathlib.Path(cptr.__file__).parent / "frontend/build/browser-runtime.js")')"
 RUN python /opt/selfwebui/scripts/install_extensions.py
-RUN python /opt/selfwebui/tests/test_controlled_worker.py && python /opt/selfwebui/tests/test_task_plan.py && python /opt/selfwebui/tests/test_extensions.py && node --check /opt/selfwebui/extensions/worker_panel.js && node --check /opt/selfwebui/extensions/direct_browser.js
+RUN python /opt/selfwebui/tests/test_controlled_worker.py && python /opt/selfwebui/tests/test_task_plan.py && python /opt/selfwebui/tests/test_loop_guard.py && python /opt/selfwebui/tests/test_extensions.py && node --check /opt/selfwebui/extensions/worker_panel.js && node --check /opt/selfwebui/extensions/direct_browser.js
 ARG UPSTREAM_DIGEST=unknown
 LABEL org.opencontainers.image.source="https://github.com/s3lfcod3r/selfwebui" io.selfwebui.upstream-digest="${UPSTREAM_DIGEST}"
 ENV HOME=/data CPTR_DATA_DIR=/data CODEX_HOME=/data/codex CLAUDE_CONFIG_DIR=/data/claude
