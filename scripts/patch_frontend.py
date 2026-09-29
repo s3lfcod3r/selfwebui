@@ -30,4 +30,11 @@ def page(s):
   s=replace(s,anchor,block+anchor)
  return s
 edit('src/routes/+page.svelte',page)
+def approval_default(relative,old,new):
+ edit(relative,lambda s:replace(s,old,new))
+# New chats start with all tool calls approved; a saved user preference still wins.
+approval_default('src/lib/stores.ts',"writable<ToolApprovalMode>('auto')","writable<ToolApprovalMode>('full')")
+approval_default('src/lib/components/chat/ChatPanel.svelte',"$state<ToolApprovalMode>('auto')","$state<ToolApprovalMode>('full')")
+approval_default('src/lib/components/chat/ChatInput.svelte',"toolApprovalMode = $bindable('auto')","toolApprovalMode = $bindable('full')")
+approval_default('src/lib/components/chat/PlusMenu.svelte',"toolApprovalMode = $bindable('auto')","toolApprovalMode = $bindable('full')")
 print('Native worker-browser tabs and split actions installed')
