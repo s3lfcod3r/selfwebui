@@ -62,4 +62,15 @@ class ControlledTests(unittest.TestCase):
    jobs.recover();state=jobs.load(ident)
    self.assertEqual(state['phase'],'gescheitert');self.assertEqual(state['steps'][0]['result']['werkzeug_protokoll'][0]['zustand'],'begonnen')
 
+class DiagnoseTests(unittest.TestCase):
+ def test_known_causes(self):
+  cases=[({'exit_code':None,'ausgabe':'Abbruch nach 120 s (timeout).'},'zeitlimit',True),
+   ({'fehler':'Direkten Arbeiter-Browser in Computer öffnen und mit „Arbeiter verbinden“ freigeben.'},'browser_nicht_verbunden',False),
+   ({'exit_code':128,'ausgabe':'Author identity unknown'},'git_identitaet',True),
+   ({'exit_code':128,'ausgabe':"fatal: could not read Username for 'https://github.com': terminal prompts disabled"},'zugangsdaten_fehlen',False),
+   ({'exit_code':127,'ausgabe':'bash: rg: command not found'},'befehl_fehlt',True),
+   ({'exit_code':7,'ausgabe':''},'exit_code_7',False)]
+  for result,cause,selbst in cases:
+   d=worker.diagnose(result);self.assertEqual((d['ursache'],d['selbst_behebbar']),(cause,selbst),result)
+
 if __name__=='__main__':unittest.main()

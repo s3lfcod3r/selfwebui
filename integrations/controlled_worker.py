@@ -36,6 +36,26 @@ def validate(data, tools=None):
         seen.add(key)
     return copy.deepcopy(calls)
 
+def diagnose(result):
+    """Classify a failed tool result so the planner can decide: retry, narrow, or ask the user."""
+    text=json.dumps(result,ensure_ascii=False).lower() if isinstance(result,dict) else ''
+    code=result.get('exit_code') if isinstance(result,dict) else None
+    rules=[
+     ('zeitlimit',('abbruch nach','timeout'),True,'Befehl war zu breit oder zu langsam. Neuen, engeren Auftrag mit festem Pfad, kleiner Suchtiefe und "timeout 60" starten; nicht dieselbe Suche wiederholen.'),
+     ('browser_nicht_verbunden',('arbeiter verbinden','browser antwortet nicht','nicht freigegeben'),False,'Sven muss den Arbeiter-Browser im Panel verbinden bzw. den Tab offen lassen. Bis dahin ohne Browser weiterarbeiten oder warten.'),
+     ('git_identitaet',('author identity unknown','please tell me who you are'),True,'Git-Name/E-Mail nur im betroffenen Repo setzen (git config user.name/user.email ohne --global) und Commit wiederholen.'),
+     ('zugangsdaten_fehlen',('could not read username','authentication failed','terminal prompts disabled'),False,'Es sind keine Zugangsdaten hinterlegt. Sven muss Push/Login selbst bereitstellen; nichts erraten.'),
+     ('befehl_fehlt',('command not found',),True,'Werkzeug fehlt auf dem Host. Vorhandene Alternative nutzen (z. B. grep statt rg) oder Nutzer fragen, bevor etwas installiert wird.'),
+     ('pfad_fehlt',('no such file','nicht gefunden'),True,'Pfad prüfen: übergeordneten Ordner mit ls auflisten, dann korrigierten Pfad verwenden.'),
+     ('keine_berechtigung',('permission denied','operation not permitted'),False,'Rechte reichen nicht. Nicht umgehen; Sven fragen.'),
+    ]
+    for name,needles,selbst,tipp in rules:
+        if any(n in text for n in needles):
+            return {'ursache':name,'selbst_behebbar':selbst,'vorschlag':tipp}
+    if code not in (None,0):
+        return {'ursache':'exit_code_%s'%code,'selbst_behebbar':False,'vorschlag':'Ausgabe im Protokoll lesen, Ursache benennen und bei Unsicherheit Sven fragen.'}
+    return {'ursache':'unbekannt','selbst_behebbar':False,'vorschlag':'Protokoll prüfen und Fehler ehrlich melden.'}
+
 def bonsai_bereit():
     try:
         with urllib.request.urlopen(BONSAI_URL+'/health',timeout=5) as r:return json.load(r).get('status')=='ok'
@@ -64,7 +84,10 @@ def bonsai_auftrag(data, tools):
                 entry.update(zustand='abgeschlossen',ergebnis=result if len(encoded)<=30000 else {'gekuerzt':True,'auszug':encoded[:30000]})
                 checkpoint(copy.deepcopy(journal))
                 if isinstance(result,dict) and ('fehler' in result or ('exit_code' in result and result['exit_code']!=0)):
-                    phase='teilweise';report='Werkzeug meldet Fehler; restliche Aufrufe nicht ausgeführt. Gespeichertes Protokoll prüfen.'
+                    diag=diagnose(result);entry['diagnose']=diag;checkpoint(copy.deepcopy(journal))
+                    phase='teilweise'
+                    report=('Werkzeug meldet Fehler; restliche Aufrufe nicht ausgeführt.\nUrsache: %s (%s selbst behebbar).\nVorschlag: %s\nGespeichertes Protokoll prüfen.'
+                        %(diag['ursache'],'kann' if diag['selbst_behebbar'] else 'nicht ohne Sven',diag['vorschlag']))
                     break
             else:
                 thinking={'aus':'none','wenig':'low','mittel':'medium','viel':'xhigh'}.get(data.get('denken','mittel'),'medium')
