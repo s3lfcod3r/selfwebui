@@ -12,6 +12,9 @@
     button{font:inherit;color:inherit;cursor:pointer;border:1px solid #3d5262;border-radius:8px;background:#14212b;padding:4px 9px}
     button:hover{background:#1b2c39}
     .state{padding:8px 12px;font-size:12px;color:#acbac9;border-bottom:1px solid #2c3b47;display:flex;align-items:center;gap:8px}
+    .chips{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;border-bottom:1px solid #2c3b47}
+    .chip{padding:3px 9px;border-radius:12px;font-size:11.5px;background:#14212b}
+    .chip.on{background:#2b6b93;border-color:#6cc4ff}
     .list{flex:1;overflow:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
     h3{margin:6px 2px 0;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:#7f93a4}
     .job{display:grid;grid-template-columns:22px 1fr;gap:4px 9px;padding:10px;border:1px solid #2c3b47;border-radius:10px;background:#131f29}
@@ -50,13 +53,17 @@
   <aside aria-label="RTX2000 Arbeiter-Status">
     <header><strong>RTX2000 · Arbeiter</strong><button type="button" id="min" title="Einklappen" aria-label="Spalte einklappen">›</button></header>
     <div class="state" id="state">Status wird geladen …</div>
+    <div class="chips" id="chips" hidden></div>
     <div class="list" id="jobs"></div>
     <div class="foot">Token/s: Messung des Modellservers inkl. Denktokens. Werkzeug- und Wartezeiten zählen nicht.</div>
   </aside>
   <div class="rail"><button type="button" id="max" title="Ausklappen" aria-label="Spalte ausklappen">‹</button><span class="badge" id="badge">–</span><span class="t">Arbeiter</span></div>`;
   document.body.append(host);
   const $ = id => shadow.getElementById(id);
-  const list = $('jobs'), state = $('state'), badge = $('badge');
+  const list = $('jobs'), state = $('state'), badge = $('badge'), chips = $('chips');
+  const FILTER_KEY = 'selfwebui-worker-filter';
+  let filter = '';
+  try { filter = localStorage.getItem(FILTER_KEY) || ''; } catch {}
   const phases = {waiting:'Übergabe',starting:'Startet',prompt:'Liest Kontext',generating:'Erzeugt Tokens',evaluating:'Prüft Antwort',tool:'Werkzeug läuft',fertig:'Fertig',erledigt:'Fertig',teilweise:'Teilweise fertig',gescheitert:'Fehlgeschlagen',bonsai_beschaeftigt:'Belegt',bonsai_nicht_verfuegbar:'Nicht verfügbar',unknown:'Status unbekannt'};
   const terminal = new Set(['fertig','erledigt','teilweise','gescheitert','bonsai_beschaeftigt','bonsai_nicht_verfuegbar']);
   const isOk = job => job.phase === 'fertig' || job.phase === 'erledigt';
@@ -119,6 +126,23 @@
     }
     return item;
   }
+  function renderChips(jobs) {
+    const projects = [...new Set(jobs.map(j => j.projekt).filter(Boolean))].sort();
+    if (filter && !projects.includes(filter)) filter = '';
+    chips.hidden = projects.length < 2;
+    chips.replaceChildren();
+    for (const name of ['', ...projects]) {
+      const count = name ? jobs.filter(j => j.projekt === name).length : jobs.length;
+      const chip = el('button', 'chip' + (name === filter ? ' on' : ''), `${name || 'Alle'} · ${count}`);
+      chip.type = 'button';
+      chip.onclick = () => {
+        filter = name;
+        try { localStorage.setItem(FILTER_KEY, filter); } catch {}
+        poll(true);
+      };
+      chips.append(chip);
+    }
+  }
   function section(name, jobs) {
     return jobs.length ? [el('h3', '', `${name} (${jobs.length})`), ...jobs.map(card)] : [];
   }
@@ -130,7 +154,9 @@
     }
     firstPoll = false;
   }
-  async function poll() {
+  let timer = 0;
+  async function poll(now) {
+    if (now) clearTimeout(timer);
     try {
       if (document.hidden) return;
       const response = await fetch('/api/selfwebui/worker/status', {cache: 'no-store'});
@@ -139,22 +165,25 @@
       }
       if (!response.ok) throw Error('offline');
       if (host.hidden) { host.hidden = false; layout(); }
-      const {jobs} = await response.json();
-      trackDone(jobs);
+      const {jobs: all} = await response.json();
+      trackDone(all);
+      renderChips(all);
+      const jobs = filter ? all.filter(j => j.projekt === filter) : all;
+      const allRunning = all.filter(j => kindOf(j) === 'run');
       const running = jobs.filter(j => kindOf(j) === 'run');
       const finished = jobs.filter(j => kindOf(j) !== 'run');
-      const active = running[0];
+      const active = allRunning[0];
       state.replaceChildren(el('span', 'ico ' + (active ? 'run' : 'ok'), active ? '' : '✓'),
         el('span', '', active ? label(active) + (Number.isFinite(active.tps) ? ` · ${active.tps.toFixed(1)} Token/s` : '') : 'Bereit'));
-      const okCount = jobs.filter(j => kindOf(j) === 'ok').length;
-      const errCount = jobs.filter(j => kindOf(j) === 'err').length;
-      badge.className = 'badge ' + (running.length ? 'run' : errCount ? 'err' : okCount ? 'ok' : '');
-      badge.textContent = running.length ? String(running.length) : errCount ? '✕' : okCount ? '✓' : '–';
+      const okCount = all.filter(j => kindOf(j) === 'ok').length;
+      const errCount = all.filter(j => kindOf(j) === 'err').length;
+      badge.className = 'badge ' + (allRunning.length ? 'run' : errCount ? 'err' : okCount ? 'ok' : '');
+      badge.textContent = allRunning.length ? String(allRunning.length) : errCount ? '✕' : okCount ? '✓' : '–';
       list.replaceChildren();
-      if (!jobs.length) list.append(el('div', 'empty', 'Noch kein Arbeiterauftrag gemessen.'));
+      if (!jobs.length) list.append(el('div', 'empty', filter ? 'Keine Aufträge in diesem Projekt.' : 'Noch kein Arbeiterauftrag gemessen.'));
       else list.append(...section('Läuft', running), ...section('Erledigt', finished.slice(0, 12)));
     } catch { state.textContent = 'Status nicht erreichbar'; badge.className = 'badge err'; badge.textContent = '?'; }
-    finally { setTimeout(poll, 1000); }
+    finally { timer = setTimeout(poll, 1000); }
   }
   poll();
 })();
