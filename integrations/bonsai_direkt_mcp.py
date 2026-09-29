@@ -23,6 +23,7 @@ BASE = os.environ.get('BONSAI_WORKER_URL', 'http://OpenWebUI-Werkzeuge:8000').rs
 KEY = Path(os.environ.get('BONSAI_WORKER_KEY_FILE', '/data/brain/worker.key')).read_text().strip()
 DEFAULT_TIMEOUT = 60
 MAX_TIMEOUT = 600
+MAX_WRITE = 60000  # one ssh argument is limited to ~128 KB (base64 inflates by a third)
 guard = LoopGuard()
 
 
@@ -43,7 +44,7 @@ TOOLS = {
         'pfad': prop('string', 'Absoluter Pfad unter /mnt/user.'),
         'ab_zeile': prop('integer', 'Erste Zeile, Standard 1.'),
         'zeilen': prop('integer', 'Anzahl Zeilen, Standard 400.')}}),
-    'datei_schreiben': ('Neue Datei schreiben (überschreibt!) oder anhängen. Für Änderungen an bestehenden Dateien datei_ersetzen benutzen, nicht die ganze Datei neu schreiben.', {
+    'datei_schreiben': ('Neue Datei schreiben (überschreibt!) oder anhängen. Legt fehlende Ordner selbst an (kein mkdir nötig). Für Änderungen an bestehenden Dateien datei_ersetzen benutzen, nicht die ganze Datei neu schreiben.', {
         'type': 'object', 'required': ['pfad', 'inhalt'], 'properties': {
             'pfad': prop('string', 'Absoluter Pfad unter /mnt/user.'),
             'inhalt': prop('string', 'Kompletter Inhalt.'),
@@ -70,10 +71,35 @@ if count > 1 and not alle:
     print(json.dumps({"fehler": "alt kommt %d-mal vor" % count, "hinweis": "Mehr Umgebung in alt aufnehmen oder alle=true setzen."})); sys.exit(5)
 new = text.replace(alt, neu) if alle else text.replace(alt, neu, 1)
 tmp = path + ".tmp-bonsai"
-open(tmp, "wb").write(new.encode("utf-8")); os.chmod(tmp, os.stat(path).st_mode); os.replace(tmp, path)
+st = os.stat(path)
+open(tmp, "wb").write(new.encode("utf-8")); os.chmod(tmp, st.st_mode)
+try:
+    os.chown(tmp, st.st_uid, st.st_gid)  # keep the owner: root-owned files break SMB access on the shares
+except (OSError, AttributeError):  # AttributeError: no chown on Windows (tests only)
+    pass
+os.replace(tmp, path)
 print(json.dumps({"pfad": path, "ersetzt": count if alle else 1,
     "zeilen_vorher": text.count("\n") + 1, "zeilen_nachher": new.count("\n") + 1,
     "sha256_vorher": hashlib.sha256(data).hexdigest()[:16], "sha256_nachher": hashlib.sha256(new.encode()).hexdigest()[:16]}))
+'''
+
+WRITE_SCRIPT = r'''
+import base64, json, os, sys
+path, content = (base64.b64decode(a).decode() for a in sys.argv[1:3])
+append = sys.argv[3] == "1"
+if not os.path.isabs(path):
+    print(json.dumps({"fehler": "Absoluter Pfad erforderlich: " + path})); sys.exit(3)
+missing, parent = [], os.path.dirname(path)
+while parent and not os.path.isdir(parent):
+    missing.append(parent); parent = os.path.dirname(parent)
+os.makedirs(os.path.dirname(path), exist_ok=True)
+existed = os.path.exists(path)
+with open(path, "a" if append else "w", encoding="utf-8") as f:
+    f.write(content)
+if path.startswith("/mnt/user/"):  # new entries belong to nobody:users like the rest of the shares
+    for created in missing + ([] if existed else [path]):
+        os.chown(created, 99, 100)
+print(json.dumps({"pfad": path, "geschrieben_zeichen": len(content), "modus": "a" if append else "w", "neu": not existed}))
 '''
 
 
@@ -110,6 +136,15 @@ def run(name, args):
             shlex_quote(EDIT_SCRIPT), b64(args['pfad']), b64(args['alt']), b64(args['neu']), '1' if args.get('alle') else '0')
         result = post('/befehl_tower', {'befehl': command, 'timeout': 30}, 45)
         return parse_edit(result)
+    if name == 'datei_schreiben':
+        for field in ('pfad', 'inhalt'):
+            if not isinstance(args.get(field), str):
+                raise ValueError('%s (Text) erforderlich' % field)
+        if len(args['inhalt']) > MAX_WRITE:
+            raise ValueError('Inhalt zu groß (%d Zeichen, höchstens %d). In Teilen mit anhaengen=true schreiben.' % (len(args['inhalt']), MAX_WRITE))
+        command = "python3 -c %s %s %s %s" % (
+            shlex_quote(WRITE_SCRIPT), b64(args['pfad']), b64(args['inhalt']), '1' if args.get('anhaengen') else '0')
+        return parse_edit(post('/befehl_tower', {'befehl': command, 'timeout': 30}, 45))
     payload = {k: v for k, v in args.items() if k in TOOLS[name][1]['properties']}
     if name.startswith('befehl_'):
         if not isinstance(payload.get('befehl'), str) or not payload['befehl'].strip():

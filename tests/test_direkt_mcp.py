@@ -100,6 +100,25 @@ class DirectMcpTests(unittest.TestCase):
         self.tool('befehl_tower', befehl='echo a', timeout=99999)
         self.assertEqual(Worker.calls[0][1]['timeout'], 600)
 
+    def test_write_creates_missing_folders_and_reports_new_file(self):
+        path = os.path.join(self.tmp, 'neu', 'tief', 'b.txt')
+        error, text = self.tool('datei_schreiben', pfad=path, inhalt='Größe\n')
+        self.assertFalse(error); self.assertTrue(json.loads(text)['neu'])
+        self.assertEqual(Path(path).read_text(encoding='utf-8'), 'Größe\n')
+
+    def test_write_can_append_and_overwrite(self):
+        path = self.file('a\n')
+        self.assertFalse(self.tool('datei_schreiben', pfad=path, inhalt='b\n', anhaengen=True)[0])
+        self.assertEqual(Path(path).read_text(encoding='utf-8'), 'a\nb\n')
+        self.assertFalse(self.tool('datei_schreiben', pfad=path, inhalt='c\n')[0])
+        self.assertEqual(Path(path).read_text(encoding='utf-8'), 'c\n')
+
+    def test_write_rejects_relative_path_and_huge_content(self):
+        error, text = self.tool('datei_schreiben', pfad='relativ.txt', inhalt='x')
+        self.assertTrue(error); self.assertIn('Absoluter Pfad', text)
+        error, text = self.tool('datei_schreiben', pfad=os.path.join(self.tmp, 'g.txt'), inhalt='x' * 70000)
+        self.assertTrue(error); self.assertIn('zu groß', text)
+
 
 if __name__ == '__main__':
     unittest.main()

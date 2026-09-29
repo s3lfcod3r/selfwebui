@@ -1,9 +1,12 @@
 """Opt-in: run Bonsai alone (no cloud planner) in the RTX2000 workspace.
 
-Usage inside the Computer container: python configure_direct.py [integrations-dir]
-Backs up app.db first. Restart the container afterwards (tool servers are cached).
+Usage: run in a one-off container while Computer is STOPPED (a running instance writes its cached
+config back on shutdown and undoes the change): python configure_direct.py [integrations-dir]
+Backs up app.db and config.toml first. config.toml [app_config] wins over the database on every start.
 """
 import json
+import os
+import re
 import shutil
 import sqlite3
 import sys
@@ -11,9 +14,10 @@ import time
 from pathlib import Path
 
 SOURCE = Path(sys.argv[1]) if len(sys.argv) > 1 else Path('/opt/selfwebui/integrations')
-DB = Path('/data/app.db')
-BRAIN = Path('/data/brain')
-WORKSPACE = Path('/data/workspaces/RTX2000')
+DATA = Path(os.environ.get('CPTR_DATA_DIR', '/data'))
+DB = DATA / 'app.db'
+BRAIN = DATA / 'brain'
+WORKSPACE = DATA / 'workspaces/RTX2000'
 MODELS = ['bonsai-2-27b', 'RTX2000/bonsai-2-27b']
 # Tool-heavy work: lower temperature than the 1.0 of the model card; other values from the card.
 REQUEST_PARAMS = {'max_tokens': 16384, 'temperature': 0.7, 'top_p': 0.95, 'top_k': 20, 'min_p': 0.05}
@@ -22,6 +26,19 @@ REQUEST_PARAMS = {'max_tokens': 16384, 'temperature': 0.7, 'top_p': 0.95, 'top_k
 def load(connection, key):
     row = connection.execute('select value from config where key=?', (key,)).fetchone()
     return json.loads(row[0]) if row and isinstance(row[0], str) else (row[0] if row else None)
+
+
+def write_toml(path, updates):
+    """Replace `key = "<json>"` lines of [app_config]; cptr re-seeds the DB from this file at start."""
+    lines = path.read_text(encoding='utf-8').split('\n')
+    for key, value in updates.items():
+        line = '%s = %s' % (json.dumps(key) if '.' in key else key, json.dumps(json.dumps(value, ensure_ascii=False)))
+        pattern = re.compile(r'^"?%s"? = ' % re.escape(key))
+        hits = [i for i, text in enumerate(lines) if pattern.match(text)]
+        if len(hits) != 1:
+            raise SystemExit('config.toml: expected exactly one line for ' + key)
+        lines[hits[0]] = line
+    path.write_text('\n'.join(lines), encoding='utf-8')
 
 
 def main():
@@ -46,6 +63,9 @@ def main():
     for key, value in (('tool_servers', servers), ('chat.models', models)):
         connection.execute('update config set value=? where key=?', (json.dumps(value), key))
     connection.commit()
+    toml = DATA / 'config.toml'
+    shutil.copy(toml, str(toml) + '.vor-direkt-' + stamp)
+    write_toml(toml, {'tool_servers': servers, 'chat.models': models})
     target = WORKSPACE / 'AGENTS.md'
     if target.is_file() and not (WORKSPACE / 'AGENTS.md.vor-direkt').exists():
         shutil.copy(target, WORKSPACE / 'AGENTS.md.vor-direkt')
