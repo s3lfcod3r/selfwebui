@@ -20,6 +20,7 @@ BRAIN = DATA / 'brain'
 WORKSPACE = DATA / 'workspaces/RTX2000'
 MODELS = ['bonsai-2-27b', 'RTX2000/bonsai-2-27b']
 # Tool-heavy work: lower temperature than the 1.0 of the model card; other values from the card.
+COMPACT_TOKENS = 180000  # the model server has 262144 tokens of context
 REQUEST_PARAMS = {'max_tokens': 16384, 'temperature': 0.7, 'top_p': 0.95, 'top_k': 20, 'min_p': 0.05}
 
 
@@ -60,6 +61,8 @@ def main():
         params['system_prompt'] = prompt
         params['builtin_tools'] = {group: False for group in (params.get('builtin_tools') or {})}
         params['request_params'] = dict(REQUEST_PARAMS)
+        # cptr summarizes at 80k tokens by default; after that the Qwen template fails ('No user query found').
+        params['compact_token_threshold'] = COMPACT_TOKENS
     for key, value in (('tool_servers', servers), ('chat.models', models)):
         connection.execute('update config set value=? where key=?', (json.dumps(value), key))
     connection.commit()

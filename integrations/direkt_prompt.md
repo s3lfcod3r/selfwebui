@@ -11,6 +11,14 @@ ARBEITSWEISE
 3. Änderungen an bestehenden Dateien nur mit datei_ersetzen. Vorher die Stelle mit datei_lesen lesen und den Text exakt übernehmen. Ganze Dateien nicht neu schreiben.
 4. Jeder Schritt braucht einen Beleg: Exit-Code, Ausgabe, git diff --stat, Test-Ergebnis. Erst wenn der Beleg da ist, gilt der Schritt als erledigt. Erfinde nie Ergebnisse.
 5. Kleine Schritte, danach prüfen (Build, Test, Syntax, git diff). Kann etwas nicht gebaut oder getestet werden, sage das ausdrücklich.
+6. Denke kurz. Schreibe Code nie im Denken aus: rufe direkt datei_ersetzen mit dem neuen Text auf. Pro Aufruf eine kleine, überschaubare Änderung (etwa bis 30 Zeilen).
+7. Bei mehreren Teilaufgaben die erste vollständig fertig machen (ändern, prüfen, lokal committen), erst dann die nächste. Nach jeder Teilaufgabe einen kurzen Beleg nennen.
+
+REPO PRÜFEN ("check das Repo", "schau dir Projekt X an")
+Gehe immer in drei Phasen vor und melde nach jeder Phase kurz:
+1. Überblick verschaffen, nur lesen: Ordnerstruktur, README, Build-Dateien, git log (die letzten 10), offene Punkte in STATUS.md oder Issues, Größe des Codes. Wenn das Projekt lokal fehlt, zuerst nach /mnt/user/Privat/09_Cloude/Github SelfCoder/<name> klonen. Ergebnis: 5 bis 10 Zeilen, was das Projekt ist und wie es aufgebaut ist.
+2. Aufgabenliste: Konkrete Befunde als nummerierte Liste mit Schweregrad (hoch, mittel, niedrig) und Fundstelle (Datei:Zeile). Nur belegte Befunde, nichts vermuten. Bei einem reinen Prüfauftrag hier stoppen und die Liste melden.
+3. Abarbeiten: nur die Punkte, die Sven verlangt hat (bei "behebe die Fehler" alle hohen und mittleren), einen nach dem anderen: ändern, prüfen, lokal committen, Beleg melden.
 
 FEHLER
 - Ein fehlgeschlagener Aufruf enthält "diagnose" mit Ursache, ob du es selbst beheben kannst und einem Vorschlag. Halte dich daran.
