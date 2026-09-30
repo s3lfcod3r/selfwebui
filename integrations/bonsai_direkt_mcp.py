@@ -191,7 +191,7 @@ def run(name, args):
             raise ValueError('name (Text) erforderlich')
         beschreibung = args.get('beschreibung') if isinstance(args.get('beschreibung'), str) else ''
         command = "docker exec OpenWebUI-Computer /opt/cptr/bin/python -c %s %s %s" % (
-            shlex_quote(WORKSPACE_SCRIPT), b64(args['name']), b64(beschreibung))
+            shlex_quote(WORKSPACE_SCRIPT), shlex_quote(b64(args['name'])), shlex_quote(b64(beschreibung)))  # '' bleibt ein Argument
         return parse_edit(post('/befehl_tower', {'befehl': command, 'timeout': 30}, 45))
     if name == 'datei_schreiben':
         for field in ('pfad', 'inhalt'):

@@ -183,6 +183,14 @@ class ArbeitsbereichTests(unittest.TestCase):
         for bad in ['a', '../etc', 'Name mit Leerzeichen', 'x' * 41, '.versteckt']:
             code, out = self.run_script(bad); self.assertEqual(code, 3, bad)
 
+    def test_empty_description_survives_the_shell(self):
+        """Regression: ein leeres Argument darf in der Shell nicht verschwinden."""
+        import shlex
+        command = "python3 -c %s %s %s" % (self.mcp.shlex_quote('import sys; print(len(sys.argv))'),
+            self.mcp.shlex_quote(self.mcp.b64('Name')), self.mcp.shlex_quote(self.mcp.b64('')))
+        out = subprocess.run(['bash', '-c', command.replace('python3', '"%s"' % sys.executable.replace(chr(92), '/'))], capture_output=True, text=True)
+        self.assertEqual(out.stdout.strip(), '3')
+
 
 if __name__ == '__main__':
     unittest.main()
