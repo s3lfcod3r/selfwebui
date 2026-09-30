@@ -54,7 +54,7 @@ class DirectMcpTests(unittest.TestCase):
 
     def test_tools_are_flat_and_do_not_include_the_planner_tool(self):
         names = [t['name'] for t in self.rpc('tools/list')['tools']]
-        self.assertEqual(names, ['befehl_tower', 'befehl_zimaboard', 'ordner_auflisten', 'datei_lesen', 'datei_schreiben', 'datei_ersetzen'])
+        self.assertEqual(names, ['befehl_tower', 'befehl_zimaboard', 'ordner_auflisten', 'datei_lesen', 'datei_schreiben', 'datei_ersetzen', 'arbeitsbereich_anlegen'])
 
     def test_replace_changes_exactly_one_place_and_reports_hashes(self):
         path = self.file('eins\nzwei\ndrei\n')
@@ -141,6 +141,47 @@ class AlsNobodyTests(unittest.TestCase):
         for cmd in ['runuser -u nobody -- git log', 'docker exec GitHubTool git pull', 'docker exec GitHubTool gitpush selfwg',
                     '/usr/bin/git status', 'echo digit', 'git --version', 'ls github']:
             self.assertEqual(f(cmd), cmd, cmd)
+
+
+class ArbeitsbereichTests(unittest.TestCase):
+    """Führt das Anlege-Skript gegen eine Test-Datenbank aus (ohne Docker)."""
+    @classmethod
+    def setUpClass(cls):
+        key = tempfile.NamedTemporaryFile('w', delete=False); key.write('k'); key.close()
+        os.environ['BONSAI_WORKER_KEY_FILE'] = key.name
+        sys.path.insert(0, str(INTEGRATIONS))
+        import bonsai_direkt_mcp
+        cls.mcp = bonsai_direkt_mcp
+
+    def setUp(self):
+        import sqlite3
+        self.base = tempfile.mkdtemp()
+        db = sqlite3.connect(os.path.join(self.base, 'app.db'))
+        db.execute('create table workspaces (id text, user_id text, path text, name text, data text, created_at integer, updated_at integer)')
+        db.execute("insert into workspaces values ('1','u1','/x/RTX2000','RTX2000','{}',1,1)"); db.commit(); db.close()
+
+    def run_script(self, name, beschreibung=''):
+        env = {**os.environ, 'CPTR_DATA_DIR': self.base, 'PYTHONIOENCODING': 'utf-8'}
+        p = subprocess.run([sys.executable, '-c', self.mcp.WORKSPACE_SCRIPT, self.mcp.b64(name), self.mcp.b64(beschreibung)],
+            capture_output=True, text=True, encoding='utf-8', env=env)
+        return p.returncode, json.loads(p.stdout.strip().splitlines()[-1])
+
+    def test_creates_folder_files_and_database_row(self):
+        code, out = self.run_script('SelfStore', 'Der App-Store für die Self-Apps')
+        self.assertEqual(code, 0); self.assertEqual(out['arbeitsbereich'], 'SelfStore')
+        folder = os.path.join(self.base, 'workspaces', 'SelfStore')
+        self.assertIn('Der App-Store', Path(folder, 'PROJEKT.md').read_text(encoding='utf-8'))
+        self.assertTrue(Path(folder, 'STATUS.md').is_file())
+        import sqlite3
+        row = sqlite3.connect(os.path.join(self.base, 'app.db')).execute("select user_id, path, data from workspaces where name='SelfStore'").fetchone()
+        self.assertEqual(row[0], 'u1'); self.assertTrue(row[1].endswith('/workspaces/SelfStore'))
+        layout = json.loads(row[2]); self.assertEqual(layout['groups'][0]['tabs'][0]['type'], 'files')
+
+    def test_existing_or_invalid_names_are_rejected(self):
+        self.assertEqual(self.run_script('SelfStore')[0], 0)
+        code, out = self.run_script('SelfStore'); self.assertEqual(code, 4); self.assertIn('existiert bereits', out['fehler'])
+        for bad in ['a', '../etc', 'Name mit Leerzeichen', 'x' * 41, '.versteckt']:
+            code, out = self.run_script(bad); self.assertEqual(code, 3, bad)
 
 
 if __name__ == '__main__':

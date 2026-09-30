@@ -56,7 +56,41 @@ TOOLS = {
             'alt': prop('string', 'Exakter alter Text, einschließlich Einrückung.'),
             'neu': prop('string', 'Neuer Text.'),
             'alle': prop('boolean', 'true = alle Vorkommen ersetzen (sonst muss es genau eins geben).')}}),
+    'arbeitsbereich_anlegen': ('Legt für ein NEUES Thema oder Projekt einen eigenen Arbeitsbereich in Open WebUI an (Ordner mit PROJEKT.md und STATUS.md, eigene Chat-Liste). Nur wenn Sven ein neues Thema startet und es noch keinen Arbeitsbereich dafür gibt. Er erscheint nach Neuladen der Seite links in der Seitenleiste.', {
+        'type': 'object', 'required': ['name'], 'properties': {
+            'name': prop('string', 'Kurzer Name des Themas, 2 bis 40 Zeichen: Buchstaben, Ziffern, Punkt, Unterstrich, Minus (z. B. SelfStore).'),
+            'beschreibung': prop('string', 'Ein bis zwei Sätze, worum es geht (kommt in PROJEKT.md).')}}),
 }
+
+WORKSPACE_SCRIPT = r'''
+import base64, json, os, re, sqlite3, sys, time, uuid
+name, beschreibung = (base64.b64decode(a).decode() for a in sys.argv[1:3])
+base = os.environ.get("CPTR_DATA_DIR", "/data")
+if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{1,39}", name):
+    print(json.dumps({"fehler": "Ungültiger Name (2 bis 40 Zeichen: Buchstaben, Ziffern, Punkt, Unterstrich, Minus)"})); sys.exit(3)
+path = base + "/workspaces/" + name
+db = sqlite3.connect(base + "/app.db", timeout=30)
+if os.path.exists(path) or db.execute("select 1 from workspaces where path=?", (path,)).fetchone():
+    print(json.dumps({"fehler": "Arbeitsbereich existiert bereits: " + name})); sys.exit(4)
+user = db.execute("select user_id from workspaces order by created_at limit 1").fetchone()
+if not user:
+    print(json.dumps({"fehler": "Kein Nutzer mit Arbeitsbereichen gefunden"})); sys.exit(5)
+os.makedirs(path)
+datum = time.strftime("%d.%m.%Y")
+projekt = ("# Projekt " + name + "\n\n- **Beschreibung:** " + (beschreibung.strip() or "(noch leer)") + "\n- **Angelegt:** " + datum
+    + "\n- **Klon:** (noch nicht festgelegt)\n\n## Bekannte offene Punkte\n- (noch keine)\n\n## Gelernt (nicht wiederholen)\n- (noch nichts)\n")
+status = "## Aufgaben\n- Projekt angelegt — in Arbeit: noch keine Aufgabe\n\n## Offene Fragen\n- (keine)\n"
+open(path + "/PROJEKT.md", "w", encoding="utf-8").write(projekt)
+open(path + "/STATUS.md", "w", encoding="utf-8").write(status)
+daten = {"groups": [{"id": "default", "tabs": [{"id": "files", "type": "files", "label": "Files", "permanent": True}],
+    "activeTabId": "files", "tabHistory": ["files"]}], "activeGroupId": "default", "layout": {"type": "group", "groupId": "default"},
+    "splitDirection": "horizontal", "splitRatio": 0.5, "fileBrowserCwd": path}
+jetzt = int(time.time())
+db.execute("insert into workspaces (id, user_id, path, name, data, created_at, updated_at) values (?,?,?,?,?,?,?)",
+    (str(uuid.uuid4()), user[0], path, name, json.dumps(daten), jetzt, jetzt)); db.commit()
+print(json.dumps({"arbeitsbereich": name, "pfad": path, "dateien": ["PROJEKT.md", "STATUS.md"],
+    "hinweis": "Seite neu laden, dann links in der Seitenleiste öffnen und dort einen neuen Chat starten."}))
+'''
 
 EDIT_SCRIPT = r'''
 import base64, hashlib, json, os, sys
@@ -152,6 +186,13 @@ def run(name, args):
             shlex_quote(EDIT_SCRIPT), b64(args['pfad']), b64(args['alt']), b64(args['neu']), '1' if args.get('alle') else '0')
         result = post('/befehl_tower', {'befehl': command, 'timeout': 30}, 45)
         return parse_edit(result)
+    if name == 'arbeitsbereich_anlegen':
+        if not isinstance(args.get('name'), str):
+            raise ValueError('name (Text) erforderlich')
+        beschreibung = args.get('beschreibung') if isinstance(args.get('beschreibung'), str) else ''
+        command = "docker exec OpenWebUI-Computer /opt/cptr/bin/python -c %s %s %s" % (
+            shlex_quote(WORKSPACE_SCRIPT), b64(args['name']), b64(beschreibung))
+        return parse_edit(post('/befehl_tower', {'befehl': command, 'timeout': 30}, 45))
     if name == 'datei_schreiben':
         for field in ('pfad', 'inhalt'):
             if not isinstance(args.get(field), str):

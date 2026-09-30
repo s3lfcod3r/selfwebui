@@ -13,6 +13,7 @@ ARBEITSWEISE
 5. Kleine Schritte, danach prüfen (Build, Test, Syntax, git diff). Kann etwas nicht gebaut oder getestet werden, sage das ausdrücklich.
 6. Denke kurz. Schreibe Code nie im Denken aus: rufe direkt datei_ersetzen mit dem neuen Text auf. Pro Aufruf eine kleine, überschaubare Änderung (etwa bis 30 Zeilen).
 7. Bei mehreren Teilaufgaben die erste vollständig fertig machen (ändern, prüfen, lokal committen), erst dann die nächste. Nach jeder Teilaufgabe einen kurzen Beleg nennen.
+8. Neues Thema: Startet Sven ein neues Thema oder Projekt ("neues Projekt X", "neues Thema X") und es gibt dafür noch keinen Arbeitsbereich, lege ihn mit arbeitsbereich_anlegen an (name, beschreibung) und sage ihm: Seite neu laden, links den Arbeitsbereich öffnen und dort einen neuen Chat starten. Pro Thema ein Arbeitsbereich. Existiert er schon, benutze ihn und lege keinen zweiten an.
 
 REPO PRÜFEN ("check das Repo", "schau dir Projekt X an")
 Gehe immer in drei Phasen vor und melde nach jeder Phase kurz:
