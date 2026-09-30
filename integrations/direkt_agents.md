@@ -18,8 +18,17 @@
 Nur auf ausdrücklichen Auftrag von Sven ("Release", "veröffentliche"), nie von selbst. Vorher `docker exec GitHubTool githubstatus`: zeigt es keinen Konto-Namen, fehlt das Token, dann melden und stoppen (nur Sven legt es ab).
 Ablauf für Version X.Y.Z im Klon `Github SelfCoder/<name>` (Container-Pfad `/repos/<name>`), jeder Schritt mit Beleg:
 1. `versionName` und `versionCode` (+1) in `app/build.gradle.kts` und das Versions-Badge in `README.md` anheben, lokal committen (`chore: bump auf X.Y.Z`).
-2. `docker exec GitHubTool gitpush <name>` (pusht nur fast-forward, nie force).
+2. Gegenprüfung (siehe unten, `diffpruefen`), dann `docker exec GitHubTool gitpush <name>` (pusht nur fast-forward, nie force).
 3. `docker exec AndroidBuild bauen <name> release /repos/<name>` (timeout 600). Es muss "Verifies", "Zertifikat stimmt mit der letzten Veröffentlichung überein" und "FERTIG" erscheinen. Sonst nicht veröffentlichen.
 4. Erst `docker exec GitHubTool veroeffentlichen <name> vX.Y.Z /out/<name>/<name>-vX.Y.Z.apk "<Notizen>" --trocken`, dann ohne `--trocken`. Notizen ehrlich: was sich geändert hat und was nicht auf einem Gerät getestet wurde.
 5. Ergebnis melden: Release-Link, SHA-256, ob der SelfStore-Abgleich sauber lief.
 Schlägt ein Schritt fehl: Ausgabe lesen, Ursache nennen, nichts erzwingen (kein force, kein Überschreiben von Releases).
+
+## Gegenprüfung vor jedem Push (Pflicht)
+Kleine Modelle löschen gelegentlich ungewollt Code oder erfinden Befunde. Darum vor jedem `gitpush`:
+1. `docker exec GitHubTool diffpruefen <name>` ausführen (`gitpush` zeigt denselben Bericht selbst noch einmal).
+2. **Jede entfernte Zeile** aus dem Bericht einzeln begründen: Warum gehört das Entfernen zum Auftrag? Kannst du es nicht begründen, stelle die Zeile wieder her und committe erneut.
+3. Prüfe, ob die Änderung genau den Befund oder Auftrag umsetzt, nicht mehr und nicht weniger.
+4. Der Bau muss grün sein, sonst kein Push.
+5. Befunde aus Prüfungen nur umsetzen, wenn du sie am Code belegen kannst (Datei:Zeile, was genau dort steht). Erfundene Regeln oder API-Namen sind ein Fehler: im Zweifel den Befund verwerfen und das melden.
+Im Bericht am Ende: Liste der entfernten Zeilen mit Begründung.

@@ -165,7 +165,7 @@
       }
       if (!response.ok) throw Error('offline');
       if (host.hidden) { host.hidden = false; layout(); }
-      const {jobs: all} = await response.json();
+      const {jobs: all, bonsai} = await response.json();
       trackDone(all);
       renderChips(all);
       const jobs = filter ? all.filter(j => j.projekt === filter) : all;
@@ -173,12 +173,15 @@
       const running = jobs.filter(j => kindOf(j) === 'run');
       const finished = jobs.filter(j => kindOf(j) !== 'run');
       const active = allRunning[0];
-      state.replaceChildren(el('span', 'ico ' + (active ? 'run' : 'ok'), active ? '' : '✓'),
-        el('span', '', active ? label(active) + (Number.isFinite(active.tps) ? ` · ${active.tps.toFixed(1)} Token/s` : '') : 'Bereit'));
+      const model = {bereit: ['ok', '✓', 'Bonsai bereit'], laedt: ['warn', '…', 'Bonsai lädt das Modell'], aus: ['err', '✕', 'Bonsai aus (GPU belegt oder gestoppt)']}[bonsai];
+      const idle = model ? model[2] : 'Bereit';
+      state.replaceChildren(el('span', 'ico ' + (active ? 'run' : model ? model[0] : 'ok'), active ? '' : model ? model[1] : '✓'),
+        el('span', '', active ? label(active) + (Number.isFinite(active.tps) ? ` · ${active.tps.toFixed(1)} Token/s` : '') : idle));
       const okCount = all.filter(j => kindOf(j) === 'ok').length;
       const errCount = all.filter(j => kindOf(j) === 'err').length;
-      badge.className = 'badge ' + (allRunning.length ? 'run' : errCount ? 'err' : okCount ? 'ok' : '');
-      badge.textContent = allRunning.length ? String(allRunning.length) : errCount ? '✕' : okCount ? '✓' : '–';
+      const bonsaiAus = bonsai === 'aus';
+      badge.className = 'badge ' + (bonsaiAus ? 'err' : allRunning.length ? 'run' : errCount ? 'err' : okCount ? 'ok' : '');
+      badge.textContent = bonsaiAus ? 'aus' : allRunning.length ? String(allRunning.length) : errCount ? '✕' : okCount ? '✓' : '–';
       list.replaceChildren();
       if (!jobs.length) list.append(el('div', 'empty', filter ? 'Keine Aufträge in diesem Projekt.' : 'Noch kein Arbeiterauftrag gemessen.'));
       else list.append(...section('Läuft', running), ...section('Erledigt', finished.slice(0, 12)));

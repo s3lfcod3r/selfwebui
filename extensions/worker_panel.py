@@ -1,5 +1,6 @@
 """Admin-only worker telemetry and explicitly requested task reports."""
 import asyncio
+import urllib.error
 import urllib.request
 import os
 import json
@@ -27,6 +28,24 @@ def summary(raw, now):
         if isinstance(raw.get(key),int) and 1<=raw[key]<=12:clean[key]=raw[key]
     clean['stale'] = now - clean.get('updated', 0) > 15 and clean['phase'] not in TERMINAL
     return clean
+
+_bonsai_cache = {'zeit': 0.0, 'zustand': 'unbekannt'}
+
+def bonsai_zustand(now=None):
+    """Health des Modellservers: bereit, laedt (Modell wird geladen) oder aus. Kurz zwischengespeichert."""
+    now = time.monotonic() if now is None else now
+    if now - _bonsai_cache['zeit'] < 5:
+        return _bonsai_cache['zustand']
+    url = os.environ.get('BONSAI_URL', 'http://192.168.1.103:8085').rstrip('/') + '/health'
+    try:
+        with urllib.request.urlopen(url, timeout=2) as response:
+            zustand = 'bereit' if json.load(response).get('status') == 'ok' else 'laedt'
+    except urllib.error.HTTPError as error:
+        zustand = 'laedt' if error.code == 503 else 'aus'
+    except (OSError, ValueError):
+        zustand = 'aus'
+    _bonsai_cache.update(zeit=now, zustand=zustand)
+    return zustand
 
 def remote_jobs():
     key=Path('/data/brain/worker.key').read_text().strip()
@@ -68,7 +87,8 @@ async def status(request: Request):
         jobs.sort(key=lambda j:j.get('started',0),reverse=True)
     except (OSError,ValueError):
         return JSONResponse({'error':'worker_unreachable'},status_code=503,headers={'Cache-Control':'no-store'})
-    return JSONResponse({'jobs': jobs[:30], 'scope': 'all-worker-jobs'}, headers={'Cache-Control': 'no-store'})
+    zustand = await asyncio.to_thread(bonsai_zustand)
+    return JSONResponse({'jobs': jobs[:30], 'scope': 'all-worker-jobs', 'bonsai': zustand}, headers={'Cache-Control': 'no-store'})
 
 @router.get('/worker/panel.js')
 async def script():

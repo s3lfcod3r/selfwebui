@@ -14,6 +14,28 @@ class TelemetryTests(unittest.TestCase):
         self.assertFalse(summary({'phase':'fertig','updated':10},30)['stale'])
 
 
+import io,urllib.error
+import worker_panel as panel
+
+class BonsaiZustandTests(unittest.TestCase):
+    def check(self,opener):
+        panel._bonsai_cache.update(zeit=0.0,zustand='unbekannt')
+        with patch('urllib.request.urlopen',opener):return panel.bonsai_zustand(now=1000.0)
+    def test_ready_loading_off(self):
+        ok=lambda url,timeout=0:io.BytesIO(b'{"status":"ok"}')
+        loading=Mock(side_effect=urllib.error.HTTPError('u',503,'loading',{},io.BytesIO(b'{}')))
+        off=Mock(side_effect=OSError('refused'))
+        self.assertEqual(self.check(ok),'bereit')
+        self.assertEqual(self.check(loading),'laedt')
+        self.assertEqual(self.check(off),'aus')
+    def test_result_is_cached_for_five_seconds(self):
+        panel._bonsai_cache.update(zeit=1000.0,zustand='bereit')
+        boom=Mock(side_effect=AssertionError('darf nicht abgefragt werden'))
+        with patch('urllib.request.urlopen',boom):self.assertEqual(panel.bonsai_zustand(now=1003.0),'bereit')
+        boom2=Mock(side_effect=OSError('refused'))
+        with patch('urllib.request.urlopen',boom2):self.assertEqual(panel.bonsai_zustand(now=1006.0),'aus')
+
+
 import asyncio,json
 from unittest.mock import patch,Mock
 from fastapi import HTTPException
