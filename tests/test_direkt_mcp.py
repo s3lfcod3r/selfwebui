@@ -120,5 +120,28 @@ class DirectMcpTests(unittest.TestCase):
         self.assertTrue(error); self.assertIn('zu groß', text)
 
 
+class AlsNobodyTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        key = tempfile.NamedTemporaryFile('w', delete=False); key.write('k'); key.close()
+        os.environ['BONSAI_WORKER_KEY_FILE'] = key.name
+        sys.path.insert(0, str(INTEGRATIONS))
+        import bonsai_direkt_mcp
+        cls.als_nobody = staticmethod(bonsai_direkt_mcp.als_nobody)
+
+    def test_plain_calls_and_chains_are_rewritten(self):
+        f = self.als_nobody
+        self.assertEqual(f('cd /x && git status'), 'cd /x && runuser -u nobody -- git status')
+        self.assertEqual(f('git status | head; git diff'), 'runuser -u nobody -- git status | head; runuser -u nobody -- git diff')
+        self.assertEqual(f("git -C '/a b' commit -m x"), "runuser -u nobody -- git -C '/a b' commit -m x")
+        self.assertEqual(f('git --no-pager log -3'), 'runuser -u nobody -- git --no-pager log -3')
+
+    def test_already_wrapped_and_other_words_are_left_alone(self):
+        f = self.als_nobody
+        for cmd in ['runuser -u nobody -- git log', 'docker exec GitHubTool git pull', 'docker exec GitHubTool gitpush selfwg',
+                    '/usr/bin/git status', 'echo digit', 'git --version', 'ls github']:
+            self.assertEqual(f(cmd), cmd, cmd)
+
+
 if __name__ == '__main__':
     unittest.main()

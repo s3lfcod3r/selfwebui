@@ -10,6 +10,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -122,6 +123,21 @@ def b64(text):
     return base64.b64encode(text.encode()).decode()
 
 
+# Git als root legt root-eigene Dateien in .git an; danach kann der Container GitHubTool (Nutzer 99) nicht mehr
+# pushen oder pullen. Darum wird jeder git-Aufruf auf dem Tower als nobody ausgeführt, egal ob das Modell daran denkt.
+GIT_AUFRUF = re.compile(
+    r'(?<![\w./-])git(?=\s+(?:(?:-C\s+(?:"[^"]*"|\'[^\']*\'|\S+)|-c\s+\S+|--no-pager|-P)\s+)*[a-z])')
+
+
+def als_nobody(befehl):
+    def ersetze(treffer):
+        davor = befehl[max(0, treffer.start() - 60):treffer.start()]
+        if 'runuser' in davor or 'docker exec' in davor or 'docker run' in davor:
+            return treffer.group(0)
+        return 'runuser -u nobody -- git'
+    return GIT_AUFRUF.sub(ersetze, befehl)
+
+
 def run(name, args):
     if name not in TOOLS:
         raise ValueError('Unbekanntes Werkzeug: ' + name)
@@ -150,6 +166,8 @@ def run(name, args):
         if not isinstance(payload.get('befehl'), str) or not payload['befehl'].strip():
             raise ValueError('befehl (Text) erforderlich')
         payload['timeout'] = timeout
+        if name == 'befehl_tower':
+            payload['befehl'] = als_nobody(payload['befehl'])
     return post('/' + name, payload, timeout + 20)
 
 
