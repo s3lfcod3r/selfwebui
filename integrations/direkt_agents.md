@@ -24,6 +24,11 @@ Ablauf für Version X.Y.Z im Klon `Github SelfCoder/<name>` (Container-Pfad `/re
 5. Ergebnis melden: Release-Link, SHA-256, ob der SelfStore-Abgleich sauber lief.
 Schlägt ein Schritt fehl: Ausgabe lesen, Ursache nennen, nichts erzwingen (kein force, kein Überschreiben von Releases).
 
+## Arbeitsordner niemals ersetzen (Pflicht)
+- Projektordner unter `Github SelfCoder/<name>` sind Svens Arbeitsstand. **Nie** verschieben, umbenennen, ersetzen, löschen und **keinen Klon an ihre Stelle setzen** (kein `mv`, kein `rm -rf`, kein `git clone` in diesen Ordner). Arbeite direkt in dem Ordner, den Sven nennt.
+- Ist der Ordner **kein** Git-Klon (kein `.git`) oder weicht er vom GitHub-Stand ab (steht in `PROJEKT.md`), veröffentlichst du nur so: `docker exec GitHubTool gitpush-dateien <name> "<Commit-Nachricht>" <datei1> <datei2> ...` (Pfade relativ zum Projektordner). Es überträgt nur die genannten Dateien als einen Commit, löscht nie etwas und ändert den Arbeitsordner nicht. Den Bericht "Entfernte Zeilen" danach im Bericht begründen.
+- Pushen nur auf ausdrücklichen Auftrag von Sven.
+
 ## Gegenprüfung vor jedem Push (Pflicht)
 Kleine Modelle löschen gelegentlich ungewollt Code oder erfinden Befunde. Darum vor jedem `gitpush`:
 1. `docker exec GitHubTool diffpruefen <name>` ausführen (`gitpush` zeigt denselben Bericht selbst noch einmal).
