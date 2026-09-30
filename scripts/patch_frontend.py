@@ -37,4 +37,25 @@ approval_default('src/lib/stores.ts',"writable<ToolApprovalMode>('auto')","writa
 approval_default('src/lib/components/chat/ChatPanel.svelte',"$state<ToolApprovalMode>('auto')","$state<ToolApprovalMode>('full')")
 approval_default('src/lib/components/chat/ChatInput.svelte',"toolApprovalMode = $bindable('auto')","toolApprovalMode = $bindable('full')")
 approval_default('src/lib/components/chat/PlusMenu.svelte',"toolApprovalMode = $bindable('auto')","toolApprovalMode = $bindable('full')")
+
+# Sidebar: 20 instead of 5 chats per workspace; the current workspace expands once when it is opened
+# (collapsing it again stays possible).
+AUTO_EXPAND = """	// Current workspace expands once on first open; collapsing it afterwards stays possible.
+	const autoExpandedWorkspaces = new Set<string>();
+	$effect(() => {
+		const path = currentPath;
+		if (!path || autoExpandedWorkspaces.has(path)) return;
+		autoExpandedWorkspaces.add(path);
+		untrack(() => {
+			if (!expandedWorkspaces.has(path)) toggleWorkspaceExpand(path);
+		});
+	});
+
+"""
+def sidebar_chats(s):
+ s=replace(s,"import { onDestroy, onMount } from 'svelte';","import { onDestroy, onMount, untrack } from 'svelte';")
+ s=replace(s,'const WS_CHATS_PAGE_SIZE = 5;','const WS_CHATS_PAGE_SIZE = 20;')
+ anchor='\tasync function fetchWorkspaceChats('
+ return replace(s,anchor,AUTO_EXPAND+anchor)
+edit('src/lib/components/SidebarWorkspaceList.svelte',sidebar_chats)
 print('Native worker-browser tabs and split actions installed')
