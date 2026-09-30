@@ -12,3 +12,13 @@
 - Schlägt der Bau fehl, zeigt die Ausgabe die Fehlerzeilen (`e: Datei:Zeile: Meldung`). Lies die Stelle, korrigiere sie mit `datei_ersetzen`, baue erneut. Höchstens 5 Versuche, dann berichte den Stand.
 - Ein Release ist nur gültig, wenn "Verifies" und der Zertifikats-Fingerabdruck (SHA-256) zum bisher veröffentlichten Release passt (bei SelfWG `a22e4d33…`). Nie einen anderen Schlüssel als den aus `keystore.properties` verwenden.
 - Veröffentlichen (push, GitHub-Release, APK-Upload) macht Claude vom PC aus, nicht du.
+
+## Release veröffentlichen (GitHubTool-Container)
+Nur auf ausdrücklichen Auftrag von Sven ("Release", "veröffentliche"), nie von selbst. Vorher `docker exec GitHubTool githubstatus`: zeigt es keinen Konto-Namen, fehlt das Token, dann melden und stoppen (nur Sven legt es ab).
+Ablauf für Version X.Y.Z im Klon `Github SelfCoder/<name>` (Container-Pfad `/repos/<name>`), jeder Schritt mit Beleg:
+1. `versionName` und `versionCode` (+1) in `app/build.gradle.kts` und das Versions-Badge in `README.md` anheben, lokal committen (`chore: bump auf X.Y.Z`).
+2. `docker exec GitHubTool gitpush <name>` (pusht nur fast-forward, nie force).
+3. `docker exec AndroidBuild bauen <name> release /repos/<name>` (timeout 600). Es muss "Verifies", "Zertifikat stimmt mit der letzten Veröffentlichung überein" und "FERTIG" erscheinen. Sonst nicht veröffentlichen.
+4. Erst `docker exec GitHubTool veroeffentlichen <name> vX.Y.Z /out/<name>/<name>-vX.Y.Z.apk "<Notizen>" --trocken`, dann ohne `--trocken`. Notizen ehrlich: was sich geändert hat und was nicht auf einem Gerät getestet wurde.
+5. Ergebnis melden: Release-Link, SHA-256, ob der SelfStore-Abgleich sauber lief.
+Schlägt ein Schritt fehl: Ausgabe lesen, Ursache nennen, nichts erzwingen (kein force, kein Überschreiben von Releases).
