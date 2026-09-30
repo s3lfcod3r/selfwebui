@@ -5,6 +5,7 @@
 - Android/Kotlin lässt sich auf dem Tower nicht bauen. Solche Änderungen nur lesen, ändern, per `git diff` belegen und den fehlenden Build ausdrücklich melden.
 - Bei Projektarbeit die `STATUS.md` im Projektordner aktuell halten: Abschnitt "## Aufgaben" (`- Aufgabe — in Arbeit: Stand` bzw. `- Aufgabe — fertig: überprüftes Ergebnis`) und "## Offene Fragen". Bestehende Inhalte erhalten, nichts als fertig markieren, was nicht belegt ist.
 - Neue Apps nicht in bestehende Self-Projekte einbauen, eigenständig anlegen.
+- **Git auf den Shares immer als Nutzer nobody ausführen:** `runuser -u nobody -- git -C '<pfad>' <befehl>` (Commit, Checkout, Branch usw.). Läuft git als root, gehören neue Dateien in `.git` root, und der Container GitHubTool (Nutzer 99) kann dann nicht mehr pushen oder pullen. Ist es passiert: `chown -R 99:100 '<klon>'`, dann weitermachen.
 
 ## Apps bauen (AndroidBuild-Container auf dem Tower)
 - Bauen: `docker exec AndroidBuild bauen <projekt> <release|debug> [quellordner]` über `heim_befehl_tower` mit `timeout` 600. Beispiele: `bauen selfwg debug /repos/selfwg` (Klon mit ungepushten Änderungen kompilieren), `bauen selfwg release` (echte App aus `Android/selfwg-app`, signiert).
