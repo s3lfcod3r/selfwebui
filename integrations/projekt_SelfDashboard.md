@@ -3,6 +3,7 @@
 - **Was:** Selbst gehostetes Homelab-Dashboard (Next.js 15, TypeScript, Docker), Plugin-System mit `plugins-pack/` und `src/builtin-plugins/`, mehrere Benutzer, 2FA. GitHub: `s3lfcod3r/selfdashboard`. Läuft auf dem Tower unter http://192.168.1.21:3000.
 - **Maßgebliche Arbeitskopie:** `/mnt/user/Privat/09_Cloude/Github SelfCoder/selfdashboard`. Sie hat **keine** Git-Historie und ist neuer als GitHub (Stand GitHub: 24.09.2026). Nie darin `git init` oder `git push` ausführen.
 - **Vor jeder Änderung:** frisch von GitHub klonen (Temp-Ordner), die Datei der Arbeitskopie per `git hash-object` gegen den Blob im Klon prüfen. Ein einfacher Dateivergleich täuscht: der Klon hat CRLF, die Arbeitskopie LF.
+- **Arbeitsklon:** `/mnt/user/Privat/09_Cloude/Github SelfCoder/selfdashboard-klon` (Git, Stand GitHub + Fix 205d18c). Dort arbeiten und committen. Die Arbeitskopie `selfdashboard` **nie verschieben, umbenennen, ersetzen oder löschen** (am 30.09.2026 wurde sie einmal durch einen Klon ersetzt und musste zurückgetauscht werden).
 - **Änderungen zurückspielen:** nur gezielte Dateien aus dem Klon pushen, nichts aus der Arbeitskopie wholesale kopieren.
 
 ## Nie tun
