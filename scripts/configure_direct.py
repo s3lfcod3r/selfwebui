@@ -17,7 +17,8 @@ SOURCE = Path(sys.argv[1]) if len(sys.argv) > 1 else Path('/opt/selfwebui/integr
 DATA = Path(os.environ.get('CPTR_DATA_DIR', '/data'))
 DB = DATA / 'app.db'
 BRAIN = DATA / 'brain'
-WORKSPACE = DATA / 'workspaces/RTX2000'
+# Arbeitsbereiche mit Bonsai-Regeln; optional eine Projektdatei aus integrations/ (wird angehängt)
+WORKSPACES = {'RTX2000': None, 'SelfWG': 'projekt_SelfWG.md'}
 MODELS = ['bonsai-2-27b', 'RTX2000/bonsai-2-27b']
 # Tool-heavy work: lower temperature than the 1.0 of the model card; other values from the card.
 COMPACT_TOKENS = 180000  # the model server has 262144 tokens of context
@@ -69,11 +70,17 @@ def main():
     toml = DATA / 'config.toml'
     shutil.copy(toml, str(toml) + '.vor-direkt-' + stamp)
     write_toml(toml, {'tool_servers': servers, 'chat.models': models})
-    target = WORKSPACE / 'AGENTS.md'
-    if target.is_file() and not (WORKSPACE / 'AGENTS.md.vor-direkt').exists():
-        shutil.copy(target, WORKSPACE / 'AGENTS.md.vor-direkt')
-    target.write_text(agents, encoding='utf-8')
-    print('Configured: tool server heim, models', MODELS, ', workspace AGENTS.md')
+    for name, project_file in WORKSPACES.items():
+        directory = DATA / 'workspaces' / name
+        directory.mkdir(parents=True, exist_ok=True)
+        target = directory / 'AGENTS.md'
+        if target.is_file() and not (directory / 'AGENTS.md.vor-direkt').exists():
+            shutil.copy(target, directory / 'AGENTS.md.vor-direkt')
+        text = agents
+        if project_file and (SOURCE / project_file).is_file():
+            text += '\n\n' + (SOURCE / project_file).read_text(encoding='utf-8')
+        target.write_text(text, encoding='utf-8')
+    print('Configured: tool server heim, models', MODELS, ', workspaces', list(WORKSPACES))
 
 
 if __name__ == '__main__':
