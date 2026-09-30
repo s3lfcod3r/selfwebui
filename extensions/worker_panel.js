@@ -62,8 +62,20 @@
   const $ = id => shadow.getElementById(id);
   const list = $('jobs'), state = $('state'), badge = $('badge'), chips = $('chips');
   const FILTER_KEY = 'selfwebui-worker-filter';
-  let filter = '';
-  try { filter = localStorage.getItem(FILTER_KEY) || ''; } catch {}
+  // filter: '' = alle, '@ws' = Aufträge des geöffneten Arbeitsbereichs, sonst ein Projektname.
+  // Im Arbeitsbereich RTX2000 (allgemein) gilt standardmäßig "Alle", in jedem anderen der eigene Bereich.
+  const norm = text => String(text).toLowerCase().replace(/[^a-z0-9]/g, '');
+  const wsName = () => {
+    try { return (new URLSearchParams(location.search).get('workspace') || '').split('/').filter(Boolean).pop() || ''; } catch { return ''; }
+  };
+  const isNamedWs = ws => Boolean(ws) && norm(ws) !== 'rtx2000';
+  const inWs = (job, ws) => norm(job.projekt || '').length >= 3 && (norm(job.projekt).includes(norm(ws)) || norm(ws).includes(norm(job.projekt)));
+  function currentFilter(ws) {
+    let saved = null;
+    try { saved = localStorage.getItem(FILTER_KEY + ':' + ws); } catch {}
+    return saved !== null ? saved : (isNamedWs(ws) ? '@ws' : '');
+  }
+  const matches = (job, filter, ws) => !filter || (filter === '@ws' ? inWs(job, ws) : job.projekt === filter);
   const phases = {waiting:'Übergabe',starting:'Startet',prompt:'Liest Kontext',generating:'Erzeugt Tokens',evaluating:'Prüft Antwort',tool:'Werkzeug läuft',fertig:'Fertig',erledigt:'Fertig',teilweise:'Teilweise fertig',gescheitert:'Fehlgeschlagen',bonsai_beschaeftigt:'Belegt',bonsai_nicht_verfuegbar:'Nicht verfügbar',unknown:'Status unbekannt'};
   const terminal = new Set(['fertig','erledigt','teilweise','gescheitert','bonsai_beschaeftigt','bonsai_nicht_verfuegbar']);
   const isOk = job => job.phase === 'fertig' || job.phase === 'erledigt';
@@ -126,18 +138,18 @@
     }
     return item;
   }
-  function renderChips(jobs) {
+  function renderChips(jobs, ws, filter) {
     const projects = [...new Set(jobs.map(j => j.projekt).filter(Boolean))].sort();
-    if (filter && !projects.includes(filter)) filter = '';
-    chips.hidden = projects.length < 2;
+    const named = isNamedWs(ws);
+    chips.hidden = !named && projects.length < 2;
     chips.replaceChildren();
-    for (const name of ['', ...projects]) {
-      const count = name ? jobs.filter(j => j.projekt === name).length : jobs.length;
-      const chip = el('button', 'chip' + (name === filter ? ' on' : ''), `${name || 'Alle'} · ${count}`);
+    for (const name of [...(named ? ['@ws'] : []), '', ...projects]) {
+      const count = jobs.filter(j => matches(j, name, ws)).length;
+      const text = name === '@ws' ? 'Dieser Bereich' : name || 'Alle';
+      const chip = el('button', 'chip' + (name === filter ? ' on' : ''), `${text} · ${count}`);
       chip.type = 'button';
       chip.onclick = () => {
-        filter = name;
-        try { localStorage.setItem(FILTER_KEY, filter); } catch {}
+        try { localStorage.setItem(FILTER_KEY + ':' + ws, name); } catch {}
         poll(true);
       };
       chips.append(chip);
@@ -167,8 +179,9 @@
       if (host.hidden) { host.hidden = false; layout(); }
       const {jobs: all, bonsai} = await response.json();
       trackDone(all);
-      renderChips(all);
-      const jobs = filter ? all.filter(j => j.projekt === filter) : all;
+      const ws = wsName(), filter = currentFilter(ws);
+      renderChips(all, ws, filter);
+      const jobs = all.filter(j => matches(j, filter, ws));
       const allRunning = all.filter(j => kindOf(j) === 'run');
       const running = jobs.filter(j => kindOf(j) === 'run');
       const finished = jobs.filter(j => kindOf(j) !== 'run');
@@ -183,7 +196,7 @@
       badge.className = 'badge ' + (bonsaiAus ? 'err' : allRunning.length ? 'run' : errCount ? 'err' : okCount ? 'ok' : '');
       badge.textContent = bonsaiAus ? 'aus' : allRunning.length ? String(allRunning.length) : errCount ? '✕' : okCount ? '✓' : '–';
       list.replaceChildren();
-      if (!jobs.length) list.append(el('div', 'empty', filter ? 'Keine Aufträge in diesem Projekt.' : 'Noch kein Arbeiterauftrag gemessen.'));
+      if (!jobs.length) list.append(el('div', 'empty', filter === '@ws' ? 'Keine Aufträge in diesem Arbeitsbereich.' : filter ? 'Keine Aufträge in diesem Projekt.' : 'Noch kein Arbeiterauftrag gemessen.'));
       else list.append(...section('Läuft', running), ...section('Erledigt', finished.slice(0, 12)));
     } catch { state.textContent = 'Status nicht erreichbar'; badge.className = 'badge err'; badge.textContent = '?'; }
     finally { timer = setTimeout(poll, 1000); }

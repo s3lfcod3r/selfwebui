@@ -18,7 +18,7 @@ DATA = Path(os.environ.get('CPTR_DATA_DIR', '/data'))
 DB = DATA / 'app.db'
 BRAIN = DATA / 'brain'
 # Arbeitsbereiche mit Bonsai-Regeln; optional eine Projektdatei aus integrations/ (wird angehängt)
-WORKSPACES = {'RTX2000': None, 'SelfWG': 'projekt_SelfWG.md'}
+WORKSPACES = {'RTX2000': None, 'SelfWG': 'projekt_SelfWG.md', 'SelfDashboard': 'projekt_SelfDashboard.md'}
 MODELS = ['bonsai-2-27b', 'RTX2000/bonsai-2-27b']
 # Tool-heavy work: lower temperature than the 1.0 of the model card; other values from the card.
 PROJEKT_HINWEIS = (
@@ -87,7 +87,8 @@ def main():
         if project_file and (SOURCE / project_file).is_file():
             text += '\n\n' + (SOURCE / project_file).read_text(encoding='utf-8')
         target.write_text(text, encoding='utf-8')
-        if project_file and (SOURCE / project_file).is_file():
+        # PROJEKT.md nur anlegen, nie überschreiben: Bonsai trägt dort Gelerntes ein.
+        if project_file and (SOURCE / project_file).is_file() and not (directory / 'PROJEKT.md').exists():
             (directory / 'PROJEKT.md').write_text((SOURCE / project_file).read_text(encoding='utf-8'), encoding='utf-8')
     print('Configured: tool server heim, models', MODELS, ', workspaces', list(WORKSPACES))
 
