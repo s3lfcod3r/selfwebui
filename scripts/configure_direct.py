@@ -21,6 +21,11 @@ BRAIN = DATA / 'brain'
 WORKSPACES = {'RTX2000': None, 'SelfWG': 'projekt_SelfWG.md'}
 MODELS = ['bonsai-2-27b', 'RTX2000/bonsai-2-27b']
 # Tool-heavy work: lower temperature than the 1.0 of the model card; other values from the card.
+PROJEKT_HINWEIS = (
+    "\n\nPROJEKTREGELN\n"
+    "Zu Beginn jeder Aufgabe in einem Projekt zuerst die Projektdatei deines Arbeitsbereichs lesen, falls sie existiert: "
+    "cat /mnt/nvme-raid/Docker/openwebui-computer-test/data/workspaces/<Name>/PROJEKT.md. Der Arbeitsbereich <Name> steht in deinem Kontext "
+    "(Pfad /data/workspaces/<Name>). Die Datei nennt Klon, Version, Schlüssel-Referenz, bekannte Punkte und Gelerntes. Danach arbeiten.\n")
 COMPACT_TOKENS = 180000  # the model server has 262144 tokens of context
 REQUEST_PARAMS = {'max_tokens': 16384, 'temperature': 0.7, 'top_p': 0.95, 'top_k': 20, 'min_p': 0.05}
 
@@ -47,8 +52,10 @@ def main():
     for name in ('bonsai_direkt_mcp.py', 'loop_guard.py', 'diagnose.py'):
         if not (BRAIN / name).is_file():
             raise SystemExit('Missing in /data/brain: ' + name)
-    prompt = (SOURCE / 'direkt_prompt.md').read_text(encoding='utf-8')
     agents = (SOURCE / 'direkt_agents.md').read_text(encoding='utf-8')
+    # cptr liest AGENTS.md bei direkten Modell-Chats nicht ein: die allgemeinen Regeln gehören deshalb fest in den
+    # Systemtext, die Projektdatei liest Bonsai zu Beginn selbst (Pfad des Arbeitsbereichs steht in seinem Kontext).
+    prompt = (SOURCE / 'direkt_prompt.md').read_text(encoding='utf-8').rstrip('\n') + '\n\n' + agents.rstrip('\n') + PROJEKT_HINWEIS
     stamp = time.strftime('%Y%m%d')
     shutil.copy(DB, str(DB) + '.vor-direkt-' + stamp)
     connection = sqlite3.connect(DB, timeout=30)
@@ -80,6 +87,8 @@ def main():
         if project_file and (SOURCE / project_file).is_file():
             text += '\n\n' + (SOURCE / project_file).read_text(encoding='utf-8')
         target.write_text(text, encoding='utf-8')
+        if project_file and (SOURCE / project_file).is_file():
+            (directory / 'PROJEKT.md').write_text((SOURCE / project_file).read_text(encoding='utf-8'), encoding='utf-8')
     print('Configured: tool server heim, models', MODELS, ', workspaces', list(WORKSPACES))
 
 
