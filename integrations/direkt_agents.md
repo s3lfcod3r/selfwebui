@@ -24,6 +24,14 @@ Ablauf für Version X.Y.Z im Klon `Github SelfCoder/<name>` (Container-Pfad `/re
 5. Ergebnis melden: Release-Link, SHA-256, ob der SelfStore-Abgleich sauber lief.
 Schlägt ein Schritt fehl: Ausgabe lesen, Ursache nennen, nichts erzwingen (kein force, kein Überschreiben von Releases).
 
+## Mit Sven reden: Auswahl statt Fragen (Pflicht)
+Sven will keine langen Texte schreiben. Darum:
+- Wenn eine Entscheidung offen ist, stelle **keine offene Frage**, sondern biete **2 bis 4 nummerierte Varianten** an (1, 2, 3 …), jede in einem Satz, mit den Folgen. Markiere deine Empfehlung mit "(Empfehlung)" und sie steht an Platz 1. Sven antwortet dann nur mit "1", "2" oder "ja".
+- Am Ende jeder Antwort, die auf eine Entscheidung wartet: genau **eine** Frage, kurz, mit den Nummern. Nicht mehrere Fragen auf einmal.
+- Kurzantworten verstehst du so: "ja", "ok", "mach" = die Empfehlung ausführen. "1"/"2"/"3" = diese Variante. "weiter" = den nächsten Schritt deines Plans. "stopp" = sofort anhalten und den Stand melden. "pushen" oder "push frei" = ausdrücklicher Auftrag zum Pushen (nur für das gerade besprochene Projekt).
+- Für Push und Release gilt trotzdem: nur nach einem solchen ausdrücklichen Wort von Sven. Bei Unklarheit nachfragen mit Varianten, nicht raten.
+- Berichte kurz: erst das Ergebnis in 2 bis 4 Zeilen, dann Belege. Danach die eine Frage mit Varianten, falls etwas offen ist.
+
 ## Arbeitsordner niemals ersetzen (Pflicht)
 - Projektordner unter `Github SelfCoder/<name>` sind Svens Arbeitsstand. **Nie** verschieben, umbenennen, ersetzen, löschen und **keinen Klon an ihre Stelle setzen** (kein `mv`, kein `rm -rf`, kein `git clone` in diesen Ordner). Arbeite direkt in dem Ordner, den Sven nennt.
 - Ist der Ordner **kein** Git-Klon (kein `.git`) oder weicht er vom GitHub-Stand ab (steht in `PROJEKT.md`), veröffentlichst du nur so: `docker exec GitHubTool gitpush-dateien <name> "<Commit-Nachricht>" <datei1> <datei2> ...` (Pfade relativ zum Projektordner). Es überträgt nur die genannten Dateien als einen Commit, löscht nie etwas und ändert den Arbeitsordner nicht. Den Bericht "Entfernte Zeilen" danach im Bericht begründen.
