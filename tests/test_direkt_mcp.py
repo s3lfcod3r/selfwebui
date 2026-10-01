@@ -136,6 +136,17 @@ class AlsNobodyTests(unittest.TestCase):
         self.assertEqual(f("git -C '/a b' commit -m x"), "runuser -u nobody -- git -C '/a b' commit -m x")
         self.assertEqual(f('git --no-pager log -3'), 'runuser -u nobody -- git --no-pager log -3')
 
+    def test_text_in_quotes_and_heredocs_is_not_rewritten(self):
+        f = self.als_nobody
+        self.assertEqual(f('echo "git add x"'), 'echo "git add x"')
+        self.assertEqual(f("printf '%s' 'fix: git add -A'"), "printf '%s' 'fix: git add -A'")
+        self.assertEqual(f('git commit -m "fix git add"'), 'runuser -u nobody -- git commit -m "fix git add"')
+        heredoc = "cat > a <<'E'" + chr(10) + "git add -A" + chr(10) + "E" + chr(10)
+        self.assertEqual(f(heredoc + "git status"), heredoc + "runuser -u nobody -- git status")
+        self.assertEqual(f('cd x && (git status)'), 'cd x && (runuser -u nobody -- git status)')
+        self.assertEqual(f('if true; then git status; fi'), 'if true; then runuser -u nobody -- git status; fi')
+        self.assertEqual(f('echo git status'), 'echo git status')
+
     def test_already_wrapped_and_other_words_are_left_alone(self):
         f = self.als_nobody
         for cmd in ['runuser -u nobody -- git log', 'docker exec GitHubTool git pull', 'docker exec GitHubTool gitpush selfwg',

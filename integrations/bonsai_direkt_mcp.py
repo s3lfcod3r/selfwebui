@@ -163,11 +163,70 @@ GIT_AUFRUF = re.compile(
     r'(?<![\w./-])git(?=\s+(?:(?:-C\s+(?:"[^"]*"|\'[^\']*\'|\S+)|-c\s+\S+|--no-pager|-P)\s+)*[a-z])')
 
 
+HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1")
+BEFEHLSANFANG = ';&|({\n`'
+
+
+def geschuetzt(befehl):
+    """Zeichen in Anführungszeichen und in Heredoc-Texten: dort steht Text, kein Befehl."""
+    maske = [False] * len(befehl)
+    ende = {}
+    for treffer in HEREDOC.finditer(befehl):
+        zeilenende = befehl.find('\n', treffer.end())
+        if zeilenende < 0:
+            continue
+        pos = zeilenende + 1
+        while pos < len(befehl):
+            nach = befehl.find('\n', pos)
+            zeile = befehl[pos:] if nach < 0 else befehl[pos:nach]
+            if zeile.strip() == treffer.group(2):
+                break
+            if nach < 0:
+                pos = len(befehl)
+                break
+            pos = nach + 1
+        ende[zeilenende + 1] = pos
+    quote, i = None, 0
+    while i < len(befehl):
+        if i in ende:
+            for k in range(i, min(ende[i], len(befehl))):
+                maske[k] = True
+            i = ende[i]
+            continue
+        zeichen = befehl[i]
+        if quote:
+            maske[i] = True
+            if zeichen == '\\' and quote == '"':
+                i += 1
+                if i < len(befehl):
+                    maske[i] = True
+            elif zeichen == quote:
+                quote = None
+        elif zeichen in '\'"':
+            quote = zeichen
+            maske[i] = True
+        i += 1
+    return maske
+
+
 def als_nobody(befehl):
+    """git-Aufrufe als nobody ausführen, aber nur dort, wo wirklich ein Befehl steht (nicht in Texten)."""
+    maske = geschuetzt(befehl)
+
     def ersetze(treffer):
-        davor = befehl[max(0, treffer.start() - 60):treffer.start()]
+        start = treffer.start()
+        davor = befehl[max(0, start - 60):start]
         if 'runuser' in davor or 'docker exec' in davor or 'docker run' in davor:
             return treffer.group(0)
+        if maske[start]:
+            return treffer.group(0)
+        pos = start - 1
+        while pos >= 0 and befehl[pos] in ' \t':
+            pos -= 1
+        if pos >= 0 and befehl[pos] not in BEFEHLSANFANG:
+            vorwort = re.search(r'(\w+)\s*$', befehl[:start])
+            if not vorwort or vorwort.group(1) not in ('then', 'do', 'else', 'elif', 'time'):
+                return treffer.group(0)
         return 'runuser -u nobody -- git'
     return GIT_AUFRUF.sub(ersetze, befehl)
 
