@@ -48,8 +48,30 @@ def write_toml(path, updates):
     path.write_text('\n'.join(lines), encoding='utf-8')
 
 
+TOOL_FILES = ('bonsai_direkt_mcp.py', 'loop_guard.py', 'diagnose.py')
+
+
+def install_tools():
+    """Copy the tool server files from the image into /data/brain (they used to stay at the first installed version)."""
+    BRAIN.mkdir(parents=True, exist_ok=True)
+    for name in TOOL_FILES:
+        source, target = SOURCE / name, BRAIN / name
+        if not source.is_file():
+            raise SystemExit('Missing in image: ' + name)
+        if target.is_file() and target.read_bytes() == source.read_bytes():
+            continue
+        owner = target.stat() if target.is_file() else None
+        if target.is_file():
+            shutil.copy(target, str(target) + '.vor-update-' + time.strftime('%Y%m%d'))
+        shutil.copy(source, target)
+        if owner is not None:
+            os.chown(target, owner.st_uid, owner.st_gid)
+        print('Tool file updated:', name)
+
+
 def main():
-    for name in ('bonsai_direkt_mcp.py', 'loop_guard.py', 'diagnose.py'):
+    install_tools()
+    for name in TOOL_FILES:
         if not (BRAIN / name).is_file():
             raise SystemExit('Missing in /data/brain: ' + name)
     agents = (SOURCE / 'direkt_agents.md').read_text(encoding='utf-8')
