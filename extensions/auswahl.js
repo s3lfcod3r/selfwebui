@@ -4,7 +4,7 @@
   if (window.__selfwebusAuswahl) return;
   window.__selfwebusAuswahl = true;
   const COLORS = ['#2f8a52', '#2b6b93', '#8a5fb0', '#b07a2a', '#a04a6a', '#3f7f86'];
-  const TRIGGER = /antworte mit der nummer|sag mir die nummer|mit der nummer|variante \d|option \d|welche variante|wie geht es weiter|warte auf deine antwort/i;
+  const TRIGGER = /antworte mit der nummer|sag mir die nummer|ich antworte nur mit der nummer/i;
   const style = document.createElement('style');
   style.textContent = '.sw-wahl{display:flex;flex-direction:column;gap:8px;margin:14px 0 4px}'
     + '.sw-wahl button{display:flex;align-items:center;gap:12px;text-align:left;padding:10px 14px;border-radius:12px;border:1px solid transparent;color:#fff;cursor:pointer;font:inherit;line-height:1.35}'
@@ -39,14 +39,14 @@
       }
       return false;
     });
-    return (mitTitel.length ? mitTitel : listen)[(mitTitel.length ? mitTitel : listen).length - 1];
+    return mitTitel[mitTitel.length - 1];   // nur Listen unter einer Vorschlags-Überschrift, nie raten
   }
 
   function pruefen() {
     const prosen = [...document.querySelectorAll('.prose')];
     const letzte = prosen[prosen.length - 1];
     if (!letzte || letzte.dataset.swWahl) return;
-    if (!TRIGGER.test(letzte.innerText.slice(-900))) return;
+    if (!TRIGGER.test(letzte.innerText.slice(-250))) return;
     const liste = wahlListe(letzte);
     if (!liste) return;
     letzte.dataset.swWahl = '1';
