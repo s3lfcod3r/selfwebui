@@ -14,6 +14,26 @@ class TelemetryTests(unittest.TestCase):
         self.assertFalse(summary({'phase':'fertig','updated':10},30)['stale'])
 
 
+import fehlerchats
+
+class FehlerchatTests(unittest.TestCase):
+    def test_error_text_and_user_abort(self):
+        self.assertEqual(fehlerchats.fehler_text({'error':' Boom '}),'Boom')
+        self.assertEqual(fehlerchats.fehler_text(None),'')
+        self.assertEqual(fehlerchats.fehler_text({'files':[]}),'')
+        self.assertTrue(fehlerchats.ignorierbar('Cancelled by user request'))
+        self.assertFalse(fehlerchats.ignorierbar('Jinja Exception: No user query found'))
+
+    def test_open_error_must_be_current_finished_assistant_message(self):
+        ok=fehlerchats.ist_fehlerfall('assistant',True,{'error':'Boom'},'m1','m1')
+        self.assertEqual(ok,'Boom')
+        self.assertEqual(fehlerchats.ist_fehlerfall('assistant',True,{'error':'Boom'},'m1','m2'),'')   # spaeter ging es weiter
+        self.assertEqual(fehlerchats.ist_fehlerfall('assistant',False,{'error':'Boom'},'m1','m1'),'')  # laeuft noch
+        self.assertEqual(fehlerchats.ist_fehlerfall('user',True,{'error':'Boom'},'m1','m1'),'')
+        self.assertEqual(fehlerchats.ist_fehlerfall('assistant',True,{'error':'aborted by user'},'m1','m1'),'')
+        self.assertEqual(fehlerchats.ist_fehlerfall('assistant',True,{},'m1','m1'),'')
+
+
 import io,urllib.error
 import worker_panel as panel
 

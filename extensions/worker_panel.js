@@ -144,7 +144,7 @@
   const wsPath = () => {
     try { return new URLSearchParams(location.search).get('workspace') || ''; } catch { return ''; }
   };
-  let chats = [], chatsFor = '', chatsAt = 0;
+  let chats = [], chatsFor = '', chatsAt = 0, errors = {};
   async function loadChats(path) {
     if (path !== chatsFor) { chats = []; chatsAt = 0; chatsFor = path; }
     if (!path || Date.now() - chatsAt < 3000) return;
@@ -153,6 +153,10 @@
       const response = await fetch('/api/chats?workspace=' + encodeURIComponent(path) + '&limit=20&sort_by=updated_at&sort_dir=desc', {cache: 'no-store'});
       if (response.ok && path === chatsFor) chats = (await response.json()).chats || [];
     } catch {}
+    try {
+      const failed = await fetch('/api/selfwebui/fehler/status', {cache: 'no-store'});
+      if (failed.ok) errors = (await failed.json()).chats || {};
+    } catch {}
   }
   function ago(ms) {
     const minutes = Math.max(0, Math.round((Date.now() - ms) / 60000));
@@ -160,15 +164,19 @@
   }
   function chatCard(chat, path) {
     const running = Boolean(chat.is_active);
-    const item = el('div', 'job' + (running ? '' : ' ok'));
-    const icon = el('div', 'ico ' + (running ? 'run' : 'ok'), running ? '' : '✓');
-    icon.setAttribute('aria-label', running ? 'Läuft' : 'Fertig');
+    const failure = running ? null : errors[chat.id];
+    const item = el('div', 'job' + (running ? '' : failure ? ' err' : ' ok'));
+    const icon = el('div', 'ico ' + (running ? 'run' : failure ? 'err' : 'ok'), running ? '' : failure ? '✕' : '✓');
+    icon.setAttribute('aria-label', running ? 'Läuft' : failure ? 'Fehler' : 'Fertig');
     const title = el('div', 'title'), link = document.createElement('a');
     link.textContent = chat.title || 'Neuer Chat';
     link.href = `/?workspace=${encodeURIComponent(path)}&chatId=${encodeURIComponent(chat.id)}`;
     title.append(link);
     const created = chat.created_at ? ` · gestartet ${ago(chat.created_at)}` : '';
-    item.append(icon, title, el('div', 'meta', running ? 'Bonsai arbeitet gerade' + created : `Fertig · zuletzt ${ago(chat.updated_at)}`));
+    item.append(icon, title, el('div', 'meta', running ? 'Bonsai arbeitet gerade' + created
+      : failure ? `Endete mit Fehler ${ago(failure.zeit || chat.updated_at)}: ${failure.fehler}
+Schreibe „weiter“ in den Chat.`
+      : `Fertig · zuletzt ${ago(chat.updated_at)}`));
     return item;
   }
   function renderChips(jobs, ws, filter) {
@@ -216,6 +224,7 @@
       await loadChats(path);
       heading.textContent = (ws || 'Home') + ' · Arbeiter';
       const runningChats = chats.filter(c => c.is_active), doneChats = chats.filter(c => !c.is_active);
+      const failedChats = doneChats.filter(c => errors[c.id]);
       const RECENT = 3600; // ältere Aufträge aus der Cloud-Zeit blenden wir aus
       const nowSec = Date.now() / 1000;
       const fresh = all.filter(j => kindOf(j) === 'run' || nowSec - (j.ended || j.updated || j.started || 0) < RECENT);
@@ -234,8 +243,8 @@
       const errCount = all.filter(j => kindOf(j) === 'err').length;
       const bonsaiAus = bonsai === 'aus';
       const runCount = allRunning.length + runningChats.length;
-      badge.className = 'badge ' + (bonsaiAus ? 'err' : runCount ? 'run' : errCount ? 'err' : okCount || doneChats.length ? 'ok' : '');
-      badge.textContent = bonsaiAus ? 'aus' : runCount ? String(runCount) : errCount ? '✕' : okCount || doneChats.length ? '✓' : '–';
+      badge.className = 'badge ' + (bonsaiAus ? 'err' : runCount ? 'run' : errCount || failedChats.length ? 'err' : okCount || doneChats.length ? 'ok' : '');
+      badge.textContent = bonsaiAus ? 'aus' : runCount ? String(runCount) : errCount || failedChats.length ? '✕' : okCount || doneChats.length ? '✓' : '–';
       list.replaceChildren();
       const runningAll = [...runningChats.map(c => chatCard(c, path)), ...running.map(card)];
       const doneAll = [...doneChats.slice(0, 10).map(c => chatCard(c, path)), ...finished.slice(0, 12).map(card)];

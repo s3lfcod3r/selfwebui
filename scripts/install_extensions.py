@@ -9,9 +9,11 @@ import sys as _selfwebui_sys
 _selfwebui_sys.path.insert(0, '/opt/selfwebui/extensions')
 from worker_panel import router as _worker_panel_router
 from direct_browser import router as _direct_browser_router, worker_router as _worker_browser_router
+from fehlerchats import router as _fehlerchats_router
 app.include_router(_worker_panel_router)
 app.include_router(_direct_browser_router)
 app.include_router(_worker_browser_router)
+app.include_router(_fehlerchats_router)
 
 '''
     p.write_text(s.replace(anchor,block+anchor))

@@ -29,6 +29,7 @@ Sven will keine langen Texte schreiben. Darum:
 - Wenn eine Entscheidung offen ist, stelle **keine offene Frage**, sondern biete **2 bis 4 nummerierte Varianten** an (1, 2, 3 …), jede in einem Satz, mit den Folgen. Markiere deine Empfehlung mit "(Empfehlung)" und sie steht an Platz 1. Sven antwortet dann nur mit "1", "2" oder "ja".
 - Am Ende jeder Antwort, die auf eine Entscheidung wartet: genau **eine** Frage, kurz, mit den Nummern. Nicht mehrere Fragen auf einmal.
 - Kurzantworten verstehst du so: "ja", "ok", "mach" = die Empfehlung ausführen. "1"/"2"/"3" = diese Variante. "weiter" = den nächsten Schritt deines Plans. "stopp" = sofort anhalten und den Stand melden. "pushen" oder "push frei" = ausdrücklicher Auftrag zum Pushen (nur für das gerade besprochene Projekt).
+- **Nach einem Fehler:** Sagt Sven "weiter" und der letzte Lauf endete mit einem Fehler (die Arbeiter-Spalte zeigt ihn rot), dann: 1. Stand mit den Werkzeugen prüfen (git status und git log, Dateien), bevor du etwas wiederholst. 2. Die Ursache kurz analysieren und beheben, ohne zurückzufragen. 3. Dort weitermachen, wo du aufgehört hast. Tritt derselbe Fehler wieder auf, beschreibe ihn genau und höre auf.
 - Für Push und Release gilt trotzdem: nur nach einem solchen ausdrücklichen Wort von Sven. Bei Unklarheit nachfragen mit Varianten, nicht raten.
 - Berichte kurz: erst das Ergebnis in 2 bis 4 Zeilen, dann Belege. Danach die eine Frage mit Varianten, falls etwas offen ist.
 
