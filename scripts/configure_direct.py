@@ -18,13 +18,14 @@ DATA = Path(os.environ.get('CPTR_DATA_DIR', '/data'))
 DB = DATA / 'app.db'
 BRAIN = DATA / 'brain'
 # Arbeitsbereiche mit Bonsai-Regeln; optional eine Projektdatei aus integrations/ (wird angehängt)
-WORKSPACES = {'RTX2000': None, 'SelfWG': 'projekt_SelfWG.md', 'SelfDashboard': 'projekt_SelfDashboard.md', 'SelfStorm': 'projekt_SelfStorm.md', 'SelfStream': 'projekt_SelfStream.md', 'SelfStreamDesktop': 'projekt_SelfStreamDesktop.md'}
+WORKSPACES = {'RTX2000': None, 'SelfWG': 'projekt_SelfWG.md', 'SelfDashboard': 'projekt_SelfDashboard.md', 'SelfStorm': 'projekt_SelfStorm.md', 'SelfStream': 'projekt_SelfStream.md', 'SelfStreamDesktop': 'projekt_SelfStreamDesktop.md',
+              'SelfStore': 'projekt_SelfStore.md', 'SelfMailer': 'projekt_SelfMailer.md', 'SelfRemote': 'projekt_SelfRemote.md', 'SelfAuthenticator': 'projekt_SelfAuthenticator.md', 'SelfArchiver': 'projekt_SelfArchiver.md', 'SelfFon': 'projekt_SelfFon.md', 'SelfMediaHub': 'projekt_SelfMediaHub.md', 'SelfPoolTracker': 'projekt_SelfPoolTracker.md', 'SelfScreen': 'projekt_SelfScreen.md', 'SelfThreatMap': 'projekt_SelfThreatMap.md', 'SelfGuard': 'projekt_SelfGuard.md'}
 MODELS = ['bonsai-2-27b', 'RTX2000/bonsai-2-27b']
 # Tool-heavy work: lower temperature than the 1.0 of the model card; other values from the card.
 PROJEKT_HINWEIS = (
     "\n\nPROJEKTREGELN\n"
     "Zu Beginn jeder Aufgabe in einem Projekt zuerst die Projektdatei deines Arbeitsbereichs lesen, falls sie existiert: "
-    "cat /mnt/nvme-raid/Docker/openwebui-computer-test/data/workspaces/<Name>/PROJEKT.md. Der Arbeitsbereich <Name> steht in deinem Kontext "
+    "cat /media/Safe-Storage/appdata/werkstatt/computer/data/workspaces/<Name>/PROJEKT.md. Der Arbeitsbereich <Name> steht in deinem Kontext "
     "(Pfad /data/workspaces/<Name>). Die Datei nennt Klon, Version, Schlüssel-Referenz, bekannte Punkte und Gelerntes. Danach arbeiten.\n")
 COMPACT_TOKENS = 180000  # the model server has 262144 tokens of context
 REQUEST_PARAMS = {'max_tokens': 16384, 'temperature': 0.7, 'top_p': 0.95, 'top_k': 20, 'min_p': 0.05}

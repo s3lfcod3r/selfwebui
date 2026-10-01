@@ -37,17 +37,17 @@ COMMAND = {'type': 'object', 'required': ['befehl'], 'properties': {
     'timeout': prop('integer', 'Sekunden bis Abbruch. Standard 60, höchstens 600. Lange Befehle mit festem Pfad und kleiner Suchtiefe.')}}
 
 TOOLS = {
-    'befehl_tower': ('Shell-Befehl als root auf dem Unraid-Tower (192.168.1.10). Shares unter /mnt/user, Docker, git. Nie über alle Shares suchen: feste Pfade, find mit -maxdepth.', COMMAND),
-    'befehl_zimaboard': ('Shell-Befehl auf dem ZimaBoard 2 (192.168.1.103) als SvensenDE, für root sudo voranstellen. Dort laufen Bonsai und DerITler.', COMMAND),
-    'ordner_auflisten': ('Inhalt eines Ordners unter /mnt/user auflisten.', {'type': 'object', 'properties': {
-        'pfad': prop('string', 'Absoluter Pfad unter /mnt/user.')}}),
-    'datei_lesen': ('Textdatei unter /mnt/user zeilenweise lesen (höchstens 2000 Zeilen je Aufruf).', {'type': 'object', 'required': ['pfad'], 'properties': {
-        'pfad': prop('string', 'Absoluter Pfad unter /mnt/user.'),
+    'befehl_werkstatt': ('Shell-Befehl als root auf der Werkstatt (ZimaBoard 2, 192.168.1.96). Docker (AndroidBuild, GitHubTool), git, Repos unter /media/Safe-Storage/appdata/werkstatt/repos. Nie über alle Shares suchen: feste Pfade, find mit -maxdepth.', COMMAND),
+    'befehl_zimaboard': ('Shell-Befehl auf dem ZimaBoard 1 (192.168.1.103) als SvensenDE, für root sudo voranstellen. Dort laufen Bonsai und DerITler.', COMMAND),
+    'ordner_auflisten': ('Inhalt eines Ordners unter /media/Safe-Storage/appdata/werkstatt auflisten.', {'type': 'object', 'properties': {
+        'pfad': prop('string', 'Absoluter Pfad unter /media/Safe-Storage/appdata/werkstatt.')}}),
+    'datei_lesen': ('Textdatei unter /media/Safe-Storage/appdata/werkstatt zeilenweise lesen (höchstens 2000 Zeilen je Aufruf).', {'type': 'object', 'required': ['pfad'], 'properties': {
+        'pfad': prop('string', 'Absoluter Pfad unter /media/Safe-Storage/appdata/werkstatt.'),
         'ab_zeile': prop('integer', 'Erste Zeile, Standard 1.'),
         'zeilen': prop('integer', 'Anzahl Zeilen, Standard 400.')}}),
     'datei_schreiben': ('Neue Datei schreiben (überschreibt!) oder anhängen. Legt fehlende Ordner selbst an (kein mkdir nötig). Für Änderungen an bestehenden Dateien datei_ersetzen benutzen, nicht die ganze Datei neu schreiben.', {
         'type': 'object', 'required': ['pfad', 'inhalt'], 'properties': {
-            'pfad': prop('string', 'Absoluter Pfad unter /mnt/user.'),
+            'pfad': prop('string', 'Absoluter Pfad unter /media/Safe-Storage/appdata/werkstatt.'),
             'inhalt': prop('string', 'Kompletter Inhalt.'),
             'anhaengen': prop('boolean', 'true = ans Ende anhängen.')}}),
     'datei_ersetzen': ('Genau eine Textstelle in einer bestehenden Datei ersetzen. "alt" muss exakt und einmalig vorkommen (sonst Fehler, nichts wird geändert). Liefert Hashes und Zeilenzahl vorher/nachher als Beleg.', {
@@ -70,18 +70,19 @@ if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{1,39}", name):
     print(json.dumps({"fehler": "Ungültiger Name (2 bis 40 Zeichen: Buchstaben, Ziffern, Punkt, Unterstrich, Minus)"})); sys.exit(3)
 path = base + "/workspaces/" + name
 db = sqlite3.connect(base + "/app.db", timeout=30)
-if os.path.exists(path) or db.execute("select 1 from workspaces where path=?", (path,)).fetchone():
+if db.execute("select 1 from workspaces where path=?", (path,)).fetchone():
     print(json.dumps({"fehler": "Arbeitsbereich existiert bereits: " + name})); sys.exit(4)
 user = db.execute("select user_id from workspaces order by created_at limit 1").fetchone()
 if not user:
     print(json.dumps({"fehler": "Kein Nutzer mit Arbeitsbereichen gefunden"})); sys.exit(5)
-os.makedirs(path)
+os.makedirs(path, exist_ok=True)   # Ordner kann schon da sein (vom Update angelegt): dann nur den Eintrag ergänzen
 datum = time.strftime("%d.%m.%Y")
 projekt = ("# Projekt " + name + "\n\n- **Beschreibung:** " + (beschreibung.strip() or "(noch leer)") + "\n- **Angelegt:** " + datum
     + "\n- **Klon:** (noch nicht festgelegt)\n\n## Bekannte offene Punkte\n- (noch keine)\n\n## Gelernt (nicht wiederholen)\n- (noch nichts)\n")
 status = "## Aufgaben\n- Projekt angelegt — in Arbeit: noch keine Aufgabe\n\n## Offene Fragen\n- (keine)\n"
-open(path + "/PROJEKT.md", "w", encoding="utf-8").write(projekt)
-open(path + "/STATUS.md", "w", encoding="utf-8").write(status)
+for datei, inhalt in (("/PROJEKT.md", projekt), ("/STATUS.md", status)):
+    if not os.path.exists(path + datei):   # vorhandene Dateien (z. B. Projektregeln) nie überschreiben
+        open(path + datei, "w", encoding="utf-8").write(inhalt)
 daten = {"groups": [{"id": "default", "tabs": [{"id": "files", "type": "files", "label": "Files", "permanent": True}],
     "activeTabId": "files", "tabHistory": ["files"]}], "activeGroupId": "default", "layout": {"type": "group", "groupId": "default"},
     "splitDirection": "horizontal", "splitRatio": 0.5, "fileBrowserCwd": path}
@@ -131,7 +132,7 @@ os.makedirs(os.path.dirname(path), exist_ok=True)
 existed = os.path.exists(path)
 with open(path, "a" if append else "w", encoding="utf-8") as f:
     f.write(content)
-if path.startswith("/mnt/user/"):  # new entries belong to nobody:users like the rest of the shares
+if path.startswith("/media/Safe-Storage/appdata/werkstatt/"):  # new entries belong to nobody:users like the rest of the shares
     for created in missing + ([] if existed else [path]):
         os.chown(created, 99, 100)
 print(json.dumps({"pfad": path, "geschrieben_zeichen": len(content), "modus": "a" if append else "w", "neu": not existed}))
@@ -158,7 +159,7 @@ def b64(text):
 
 
 # Git als root legt root-eigene Dateien in .git an; danach kann der Container GitHubTool (Nutzer 99) nicht mehr
-# pushen oder pullen. Darum wird jeder git-Aufruf auf dem Tower als nobody ausgeführt, egal ob das Modell daran denkt.
+# pushen oder pullen. Darum wird jeder git-Aufruf auf der Werkstatt (Board 2) als nobody ausgeführt, egal ob das Modell daran denkt.
 GIT_AUFRUF = re.compile(
     r'(?<![\w./-])git(?=\s+(?:(?:-C\s+(?:"[^"]*"|\'[^\']*\'|\S+)|-c\s+\S+|--no-pager|-P)\s+)*[a-z])')
 
@@ -216,7 +217,7 @@ def als_nobody(befehl):
     def ersetze(treffer):
         start = treffer.start()
         davor = befehl[max(0, start - 60):start]
-        if 'runuser' in davor or 'docker exec' in davor or 'docker run' in davor:
+        if 'git99' in davor or 'docker exec' in davor or 'docker run' in davor:
             return treffer.group(0)
         if maske[start]:
             return treffer.group(0)
@@ -227,7 +228,7 @@ def als_nobody(befehl):
             vorwort = re.search(r'(\w+)\s*$', befehl[:start])
             if not vorwort or vorwort.group(1) not in ('then', 'do', 'else', 'elif', 'time'):
                 return treffer.group(0)
-        return 'runuser -u nobody -- git'
+        return '/media/Safe-Storage/appdata/werkstatt/bin/git99'
     return GIT_AUFRUF.sub(ersetze, befehl)
 
 
@@ -243,7 +244,7 @@ def run(name, args):
                 raise ValueError('%s (Text) erforderlich' % field)
         command = "python3 -c %s %s %s %s %s" % (
             shlex_quote(EDIT_SCRIPT), b64(args['pfad']), b64(args['alt']), b64(args['neu']), '1' if args.get('alle') else '0')
-        result = post('/befehl_tower', {'befehl': command, 'timeout': 30}, 45)
+        result = post('/befehl_werkstatt', {'befehl': command, 'timeout': 30}, 45)
         return parse_edit(result)
     if name == 'arbeitsbereich_anlegen':
         if not isinstance(args.get('name'), str):
@@ -251,7 +252,7 @@ def run(name, args):
         beschreibung = args.get('beschreibung') if isinstance(args.get('beschreibung'), str) else ''
         command = "docker exec OpenWebUI-Computer /opt/cptr/bin/python -c %s %s %s" % (
             shlex_quote(WORKSPACE_SCRIPT), shlex_quote(b64(args['name'])), shlex_quote(b64(beschreibung)))  # '' bleibt ein Argument
-        return parse_edit(post('/befehl_tower', {'befehl': command, 'timeout': 30}, 45))
+        return parse_edit(post('/befehl_werkstatt', {'befehl': command, 'timeout': 30}, 45))
     if name == 'datei_schreiben':
         for field in ('pfad', 'inhalt'):
             if not isinstance(args.get(field), str):
@@ -260,13 +261,13 @@ def run(name, args):
             raise ValueError('Inhalt zu groß (%d Zeichen, höchstens %d). In Teilen mit anhaengen=true schreiben.' % (len(args['inhalt']), MAX_WRITE))
         command = "python3 -c %s %s %s %s" % (
             shlex_quote(WRITE_SCRIPT), b64(args['pfad']), b64(args['inhalt']), '1' if args.get('anhaengen') else '0')
-        return parse_edit(post('/befehl_tower', {'befehl': command, 'timeout': 30}, 45))
+        return parse_edit(post('/befehl_werkstatt', {'befehl': command, 'timeout': 30}, 45))
     payload = {k: v for k, v in args.items() if k in TOOLS[name][1]['properties']}
     if name.startswith('befehl_'):
         if not isinstance(payload.get('befehl'), str) or not payload['befehl'].strip():
             raise ValueError('befehl (Text) erforderlich')
         payload['timeout'] = timeout
-        if name == 'befehl_tower':
+        if name == 'befehl_werkstatt':
             payload['befehl'] = als_nobody(payload['befehl'])
     return post('/' + name, payload, timeout + 20)
 

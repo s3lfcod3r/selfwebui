@@ -59,8 +59,8 @@ class LoopGuard:
 
 
 EXAMPLE = ('Beispiel für einen gültigen Aufruf: {"auftrag": "Repo klonen und Ordner auflisten", '
-           '"projekt": "SelfWG", "titel": "SelfWG klonen", "erlaubte_aufrufe": [{"werkzeug": "befehl_tower", '
-           '"argumente": {"befehl": "git clone https://github.com/s3lfcod3r/selfwg /mnt/user/x/selfwg"}}]}')
+           '"projekt": "SelfWG", "titel": "SelfWG klonen", "erlaubte_aufrufe": [{"werkzeug": "befehl_werkstatt", '
+           '"argumente": {"befehl": "git clone https://github.com/s3lfcod3r/selfwg /media/Safe-Storage/appdata/werkstatt/x/selfwg"}}]}')
 
 
 def normalize(args):

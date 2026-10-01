@@ -1,6 +1,6 @@
 # Projekt SelfStream
 
-- **Was:** Selbst gehosteter Streaming- und Live-TV-Dienst (Python-Backend `backend/`, Web-Frontend `frontend/`), läuft als Docker-Container `selfstream` auf dem Tower (192.168.1.14). GitHub: `s3lfcod3r/selfstream` (öffentlich). Image: `ghcr.io/s3lfcod3r/selfstream:latest`.
+- **Was:** Selbst gehosteter Streaming- und Live-TV-Dienst (Python-Backend `backend/`, Web-Frontend `frontend/`), läuft als Docker-Container `selfstream` auf der Werkstatt (Board 2) (192.168.1.14). GitHub: `s3lfcod3r/selfstream` (öffentlich). Image: `ghcr.io/s3lfcod3r/selfstream:latest`.
 - **Maßgeblich ist GitHub `main`, nicht der Ordner auf F:.** Der Ordner `Github SelfCoder/selfstream` ist ein alter Stand vom 22.08.2026 ohne Git (Backend dort viel kleiner, es fehlen z. B. `epg_merge.py` und `epg_quality.py`). Nie daraus prüfen oder pushen.
 - **Prüfen ohne den Ordner anzufassen:** einen flachen Klon in einen Temp-Ordner machen, z. B. `git clone --depth 1 https://github.com/s3lfcod3r/selfstream /tmp/selfstream-check`, und nur dort lesen. Nach der Prüfung bleibt der Temp-Ordner liegen oder wird gelöscht, der Ordner `selfstream` wird nie verändert. Ändern und Pushen: nur auf ausdrücklichen Auftrag von Sven.
 - **Container:** läuft den Stand v1.82 (Commit 4e0b094); auf GitHub liegt seit 27.09.2026 v1.83 (gebaut, noch nicht ausgerollt). Den laufenden Container nicht anfassen, nicht neu starten.

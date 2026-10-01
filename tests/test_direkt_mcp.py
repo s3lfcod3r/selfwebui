@@ -12,7 +12,7 @@ class Worker(BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         Worker.calls.append((self.path, body))
-        if self.path == '/befehl_tower':
+        if self.path == '/befehl_werkstatt':
             cmd = body['befehl'].replace('python3 ', '"%s" ' % sys.executable.replace('\\', '/'), 1)
             p = subprocess.run(['bash', '-c', cmd], capture_output=True, text=True, encoding='utf-8')
             out = {'exit_code': p.returncode, 'ausgabe': p.stdout + (('\n[stderr]\n' + p.stderr) if p.stderr.strip() else '')}
@@ -54,7 +54,7 @@ class DirectMcpTests(unittest.TestCase):
 
     def test_tools_are_flat_and_do_not_include_the_planner_tool(self):
         names = [t['name'] for t in self.rpc('tools/list')['tools']]
-        self.assertEqual(names, ['befehl_tower', 'befehl_zimaboard', 'ordner_auflisten', 'datei_lesen', 'datei_schreiben', 'datei_ersetzen', 'arbeitsbereich_anlegen'])
+        self.assertEqual(names, ['befehl_werkstatt', 'befehl_zimaboard', 'ordner_auflisten', 'datei_lesen', 'datei_schreiben', 'datei_ersetzen', 'arbeitsbereich_anlegen'])
 
     def test_replace_changes_exactly_one_place_and_reports_hashes(self):
         path = self.file('eins\nzwei\ndrei\n')
@@ -83,21 +83,21 @@ class DirectMcpTests(unittest.TestCase):
         self.assertEqual(Path(path).read_text(encoding='utf-8'), 'print("Maß")\n')
 
     def test_failed_command_carries_diagnosis(self):
-        error, text = self.tool('befehl_tower', befehl='exit 7')
+        error, text = self.tool('befehl_werkstatt', befehl='exit 7')
         self.assertTrue(error); self.assertIn('exit_code_7', text)
 
     def test_identical_repeated_command_is_stopped_before_the_worker(self):
         for _ in range(5):
-            error, text = self.tool('befehl_tower', befehl='echo hallo')
+            error, text = self.tool('befehl_werkstatt', befehl='echo hallo')
         self.assertTrue(error); self.assertIn('Schleife erkannt', text)
-        self.assertEqual(len([c for c in Worker.calls if c[0] == '/befehl_tower']), 2)
+        self.assertEqual(len([c for c in Worker.calls if c[0] == '/befehl_werkstatt']), 2)
 
     def test_missing_command_is_reported_without_calling_the_worker(self):
-        error, text = self.tool('befehl_tower')
+        error, text = self.tool('befehl_werkstatt')
         self.assertTrue(error); self.assertEqual(Worker.calls, [])
 
     def test_default_timeout_is_capped(self):
-        self.tool('befehl_tower', befehl='echo a', timeout=99999)
+        self.tool('befehl_werkstatt', befehl='echo a', timeout=99999)
         self.assertEqual(Worker.calls[0][1]['timeout'], 600)
 
     def test_write_creates_missing_folders_and_reports_new_file(self):
@@ -131,25 +131,25 @@ class AlsNobodyTests(unittest.TestCase):
 
     def test_plain_calls_and_chains_are_rewritten(self):
         f = self.als_nobody
-        self.assertEqual(f('cd /x && git status'), 'cd /x && runuser -u nobody -- git status')
-        self.assertEqual(f('git status | head; git diff'), 'runuser -u nobody -- git status | head; runuser -u nobody -- git diff')
-        self.assertEqual(f("git -C '/a b' commit -m x"), "runuser -u nobody -- git -C '/a b' commit -m x")
-        self.assertEqual(f('git --no-pager log -3'), 'runuser -u nobody -- git --no-pager log -3')
+        self.assertEqual(f('cd /x && git status'), 'cd /x && /media/Safe-Storage/appdata/werkstatt/bin/git99 status')
+        self.assertEqual(f('git status | head; git diff'), '/media/Safe-Storage/appdata/werkstatt/bin/git99 status | head; /media/Safe-Storage/appdata/werkstatt/bin/git99 diff')
+        self.assertEqual(f("git -C '/a b' commit -m x"), "/media/Safe-Storage/appdata/werkstatt/bin/git99 -C '/a b' commit -m x")
+        self.assertEqual(f('git --no-pager log -3'), '/media/Safe-Storage/appdata/werkstatt/bin/git99 --no-pager log -3')
 
     def test_text_in_quotes_and_heredocs_is_not_rewritten(self):
         f = self.als_nobody
         self.assertEqual(f('echo "git add x"'), 'echo "git add x"')
         self.assertEqual(f("printf '%s' 'fix: git add -A'"), "printf '%s' 'fix: git add -A'")
-        self.assertEqual(f('git commit -m "fix git add"'), 'runuser -u nobody -- git commit -m "fix git add"')
+        self.assertEqual(f('git commit -m "fix git add"'), '/media/Safe-Storage/appdata/werkstatt/bin/git99 commit -m "fix git add"')
         heredoc = "cat > a <<'E'" + chr(10) + "git add -A" + chr(10) + "E" + chr(10)
-        self.assertEqual(f(heredoc + "git status"), heredoc + "runuser -u nobody -- git status")
-        self.assertEqual(f('cd x && (git status)'), 'cd x && (runuser -u nobody -- git status)')
-        self.assertEqual(f('if true; then git status; fi'), 'if true; then runuser -u nobody -- git status; fi')
+        self.assertEqual(f(heredoc + "git status"), heredoc + "/media/Safe-Storage/appdata/werkstatt/bin/git99 status")
+        self.assertEqual(f('cd x && (git status)'), 'cd x && (/media/Safe-Storage/appdata/werkstatt/bin/git99 status)')
+        self.assertEqual(f('if true; then git status; fi'), 'if true; then /media/Safe-Storage/appdata/werkstatt/bin/git99 status; fi')
         self.assertEqual(f('echo git status'), 'echo git status')
 
     def test_already_wrapped_and_other_words_are_left_alone(self):
         f = self.als_nobody
-        for cmd in ['runuser -u nobody -- git log', 'docker exec GitHubTool git pull', 'docker exec GitHubTool gitpush selfwg',
+        for cmd in ['/media/Safe-Storage/appdata/werkstatt/bin/git99 log', 'docker exec GitHubTool git pull', 'docker exec GitHubTool gitpush selfwg',
                     '/usr/bin/git status', 'echo digit', 'git --version', 'ls github']:
             self.assertEqual(f(cmd), cmd, cmd)
 
@@ -193,6 +193,17 @@ class ArbeitsbereichTests(unittest.TestCase):
         code, out = self.run_script('SelfStore'); self.assertEqual(code, 4); self.assertIn('existiert bereits', out['fehler'])
         for bad in ['a', '../etc', 'Name mit Leerzeichen', 'x' * 41, '.versteckt']:
             code, out = self.run_script(bad); self.assertEqual(code, 3, bad)
+
+    def test_existing_folder_without_database_row_only_gets_the_row(self):
+        folder = os.path.join(self.base, 'workspaces', 'SelfMailer'); os.makedirs(folder)
+        Path(folder, 'PROJEKT.md').write_text('Projektregeln von Sven', encoding='utf-8')
+        code, out = self.run_script('SelfMailer', 'Mail-Client')
+        self.assertEqual(code, 0); self.assertEqual(out['arbeitsbereich'], 'SelfMailer')
+        self.assertEqual(Path(folder, 'PROJEKT.md').read_text(encoding='utf-8'), 'Projektregeln von Sven')   # nicht überschrieben
+        self.assertTrue(Path(folder, 'STATUS.md').is_file())                                              # fehlende Datei ergänzt
+        import sqlite3
+        self.assertEqual(sqlite3.connect(os.path.join(self.base, 'app.db')).execute("select count(*) from workspaces where name='SelfMailer'").fetchone()[0], 1)
+        self.assertEqual(self.run_script('SelfMailer')[0], 4)   # jetzt gibt es die Zeile: zweites Anlegen wird abgelehnt
 
     def test_empty_description_survives_the_shell(self):
         """Regression: ein leeres Argument darf in der Shell nicht verschwinden."""

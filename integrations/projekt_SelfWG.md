@@ -1,7 +1,7 @@
 # Projekt SelfWG
 
 - **Was:** Android-WireGuard-Client (Kotlin/Compose) mit Auto-Reconnect-Wächter, der die tägliche IP-Änderung des Providers übersteht. Split-Tunnel pro App, mehrere Tunnel, Fingerabdruck-Sperre. GitHub: `s3lfcod3r/selfwg`.
-- **Klon zum Arbeiten:** `/mnt/user/Privat/09_Cloude/Github SelfCoder/selfwg` (im Container `/repos/selfwg`). Der echte App-Ordner mit Schlüssel ist `Github SelfCoder/Android/selfwg-app`; den aktualisiert Sven selbst per `git pull`.
+- **Klon zum Arbeiten:** `/media/Safe-Storage/appdata/werkstatt/repos/selfwg` (im Container `/repos/selfwg`). Der echte App-Ordner mit Schlüssel ist `Github SelfCoder/Android/selfwg-app`; den aktualisiert Sven selbst per `git pull`.
 - **Stand:** v1.2.5 (versionCode 8), veröffentlicht. Zertifikat-Fingerabdruck (SHA-256) `a22e4d33…a22b`, Referenz in `Android/_apk-out/selfwg/cert-sha256.txt`.
 - **Version:** `versionCode`/`versionName` in `app/build.gradle.kts` (Zeile ca. 29/30), Badge in `README.md` (Zeile 9).
 - **Bauen:** `docker exec AndroidBuild bauen selfwg <debug|release> /repos/selfwg`. Release nur mit `keystore.properties` (liegt in `Android/selfwg-app`), sonst bricht der Bau ab.
