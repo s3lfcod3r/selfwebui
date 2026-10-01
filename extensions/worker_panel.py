@@ -8,7 +8,7 @@ import math
 import time
 from pathlib import Path
 from fastapi import APIRouter, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from cptr.routers.admin import require_admin
 
 router = APIRouter(prefix='/api/selfwebui')
@@ -92,4 +92,7 @@ async def status(request: Request):
 
 @router.get('/worker/panel.js')
 async def script():
-    return FileResponse('/opt/selfwebui/extensions/worker_panel.js', media_type='application/javascript', headers={'Cache-Control':'no-store'})
+    # Spalte und Auswahl-Knöpfe (auswahl.js) laufen als ein Skript
+    base = Path('/opt/selfwebui/extensions')
+    text = chr(10).join((base / name).read_text(encoding='utf-8') for name in ('worker_panel.js', 'auswahl.js'))
+    return Response(text, media_type='application/javascript', headers={'Cache-Control':'no-store'})
