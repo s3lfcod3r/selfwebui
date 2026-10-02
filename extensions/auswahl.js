@@ -14,6 +14,15 @@
     + '.sw-hinweis{font-size:12px;opacity:.7;margin-bottom:2px}';
   document.head.append(style);
 
+  // Der Senden-Knopf ist der letzte Knopf im Eingabebereich (Anhang, Modell, Mikrofon, Senden).
+  function sendeKnopf(editor) {
+    for (let root = editor, i = 0; root && i < 8; root = root.parentElement, i++) {
+      const knoepfe = [...root.querySelectorAll('button')];
+      if (knoepfe.length >= 3) return knoepfe[knoepfe.length - 1];
+    }
+    return null;
+  }
+
   function senden(zahl) {
     const editor = document.querySelector('.chat-prosemirror[contenteditable=true], .tiptap[contenteditable=true]');
     if (!editor) return;
@@ -22,6 +31,13 @@
     const enter = type => new KeyboardEvent(type, {key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true});
     editor.dispatchEvent(enter('keydown'));
     editor.dispatchEvent(enter('keyup'));
+    // Reicht Enter nicht (die Zahl steht noch im Feld), klickt der Knopf selbst auf Senden.
+    setTimeout(() => {
+      if ((editor.innerText || '').trim() !== String(zahl)) return;
+      const knopf = sendeKnopf(editor);
+      // Läuft Bonsai gerade, ist der letzte Knopf "Stopp" (Kreis mit Quadrat): den nie anklicken.
+      if (knopf && !knopf.disabled && !/M2\.25 12c0-5\.385/.test(knopf.innerHTML)) knopf.click();
+    }, 300);
   }
 
   function kurz(text) {
