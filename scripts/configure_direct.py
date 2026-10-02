@@ -11,6 +11,7 @@ import shutil
 import sqlite3
 import sys
 import time
+import uuid
 from pathlib import Path
 
 SOURCE = Path(sys.argv[1]) if len(sys.argv) > 1 else Path('/opt/selfwebui/integrations')
@@ -70,6 +71,27 @@ def install_tools():
         print('Tool file updated:', name)
 
 
+def ensure_workspace_rows(connection, names):
+    """Trägt fehlende Arbeitsbereiche in die Datenbank ein (die Seitenleiste zeigt nur Einträge, nicht Ordner)."""
+    first = connection.execute('select user_id from workspaces order by created_at limit 1').fetchone()
+    if not first:
+        return []
+    added = []
+    for name in names:
+        path = '/data/workspaces/' + name
+        if connection.execute('select 1 from workspaces where path=?', (path,)).fetchone():
+            continue
+        data = {'groups': [{'id': 'default', 'tabs': [{'id': 'files', 'type': 'files', 'label': 'Files', 'permanent': True}],
+                            'activeTabId': 'files', 'tabHistory': ['files']}], 'activeGroupId': 'default',
+                'layout': {'type': 'group', 'groupId': 'default'}, 'splitDirection': 'horizontal', 'splitRatio': 0.5, 'fileBrowserCwd': path}
+        now = int(time.time())
+        connection.execute('insert into workspaces (id, user_id, path, name, data, created_at, updated_at) values (?,?,?,?,?,?,?)',
+                           (str(uuid.uuid4()), first[0], path, name, json.dumps(data), now, now))
+        added.append(name)
+    connection.commit()
+    return added
+
+
 def main():
     install_tools()
     for name in TOOL_FILES:
@@ -113,7 +135,8 @@ def main():
         # PROJEKT.md nur anlegen, nie überschreiben: Bonsai trägt dort Gelerntes ein.
         if project_file and (SOURCE / project_file).is_file() and not (directory / 'PROJEKT.md').exists():
             (directory / 'PROJEKT.md').write_text((SOURCE / project_file).read_text(encoding='utf-8'), encoding='utf-8')
-    print('Configured: tool server heim, models', MODELS, ', workspaces', list(WORKSPACES))
+    added = ensure_workspace_rows(connection, WORKSPACES)
+    print('Configured: tool server heim, models', MODELS, ', workspaces', list(WORKSPACES), ', neu in der Seitenleiste', added)
 
 
 if __name__ == '__main__':

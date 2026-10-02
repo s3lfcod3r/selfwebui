@@ -216,3 +216,17 @@ class ArbeitsbereichTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class EnsureWorkspaceRowsTest(unittest.TestCase):
+    def test_adds_only_missing_rows_and_is_repeatable(self):
+        import importlib.util
+        import sqlite3
+        spec = importlib.util.spec_from_file_location('configure_direct', os.path.join(os.path.dirname(__file__), '..', 'scripts', 'configure_direct.py'))
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        db = sqlite3.connect(':memory:')
+        db.execute('create table workspaces (id text, user_id text, path text, name text, data text, created_at integer, updated_at integer)')
+        db.execute("insert into workspaces values ('1','u1','/data/workspaces/RTX2000','RTX2000','{}',1,1)")
+        self.assertEqual(module.ensure_workspace_rows(db, ['RTX2000', 'SelfStore']), ['SelfStore'])
+        self.assertEqual(module.ensure_workspace_rows(db, ['RTX2000', 'SelfStore']), [])
+        self.assertEqual(db.execute("select user_id from workspaces where name='SelfStore'").fetchone()[0], 'u1')
