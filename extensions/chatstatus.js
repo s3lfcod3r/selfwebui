@@ -28,10 +28,9 @@
     const lesen = a.phase === 'liest';
     box.className = 'sw-chatstatus ' + (lesen ? 'liest' : 'schreibt');
     text.textContent = lesen
-      ? `Bonsai liest den Chat: ${zahl(a.gelesen)} von ${zahl(a.gesamt)} Token. Noch keine Ausgabe, das dauert bei langen Chats.`
+      ? `Bonsai liest den Chat: bisher ${zahl(a.gelesen)} Token. Noch keine Ausgabe, das dauert bei langen Chats.`
       : `Bonsai schreibt: ${zahl(a.geschrieben)} Token`;
-    bar.style.display = lesen && a.gesamt ? '' : 'none';
-    fill.style.width = a.gesamt ? Math.min(100, Math.round(a.gelesen / a.gesamt * 100)) + '%' : '0';
+    bar.style.display = 'none';   // die Gesamtlänge liefert der Server nicht, nur den Fortschritt
     const rect = editor.getBoundingClientRect();
     box.style.display = 'flex';
     box.style.left = Math.max(8, rect.left) + 'px';

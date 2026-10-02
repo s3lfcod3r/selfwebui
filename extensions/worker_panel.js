@@ -209,7 +209,7 @@ Schreibe „weiter“ in den Chat.`
   }
   function aktivText(a) {
     const zahl = n => n.toLocaleString('de-DE');
-    if (a.phase === 'liest') return `Bonsai liest den Chat: ${zahl(a.gelesen)} von ${zahl(a.gesamt)} Token (noch keine Ausgabe, das dauert bei langen Chats)`;
+    if (a.phase === 'liest') return `Bonsai liest den Chat: bisher ${zahl(a.gelesen)} Token (noch keine Ausgabe, das dauert bei langen Chats)`;
     return `Bonsai schreibt: ${zahl(a.geschrieben)} Token`;
   }
   let timer = 0;
