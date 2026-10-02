@@ -55,7 +55,13 @@
       }
       return false;
     });
-    return mitTitel[mitTitel.length - 1];   // nur Listen unter einer Vorschlags-Überschrift, nie raten
+    if (mitTitel.length) return mitTitel[mitTitel.length - 1];
+    // Überschrift anders benannt (z. B. "Nächster Punkt?"): die Liste, auf die direkt "Antworte mit der Nummer" folgt.
+    return listen.filter(l => {
+      let weiter = 0;
+      for (let el = l.nextElementSibling; el; el = el.nextElementSibling) weiter++;
+      return weiter <= 2 && TRIGGER.test(l.parentElement.innerText.slice(-250));
+    }).pop();
   }
 
   function pruefen() {
