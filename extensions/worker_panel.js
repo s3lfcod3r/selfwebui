@@ -207,6 +207,11 @@ Schreibe „weiter“ in den Chat.`
     }
     firstPoll = false;
   }
+  function aktivText(a) {
+    const zahl = n => n.toLocaleString('de-DE');
+    if (a.phase === 'liest') return `Bonsai liest den Chat: ${zahl(a.gelesen)} von ${zahl(a.gesamt)} Token (noch keine Ausgabe, das dauert bei langen Chats)`;
+    return `Bonsai schreibt: ${zahl(a.geschrieben)} Token`;
+  }
   let timer = 0;
   async function poll(now) {
     if (now) clearTimeout(timer);
@@ -218,7 +223,7 @@ Schreibe „weiter“ in den Chat.`
       }
       if (!response.ok) throw Error('offline');
       if (host.hidden) { host.hidden = false; layout(); }
-      const {jobs: all, bonsai} = await response.json();
+      const {jobs: all, bonsai, aktivitaet} = await response.json();
       trackDone(all);
       const ws = wsName(), filter = currentFilter(ws), path = wsPath();
       await loadChats(path);
@@ -236,9 +241,9 @@ Schreibe „weiter“ in den Chat.`
       const active = allRunning[0], activeChat = runningChats[0];
       const model = {bereit: ['ok', '✓', 'Bonsai bereit'], laedt: ['warn', '…', 'Bonsai lädt das Modell'], aus: ['err', '✕', 'Bonsai aus (GPU belegt oder gestoppt)']}[bonsai];
       const idle = model ? model[2] : 'Bereit';
-      const busy = active || activeChat;
+      const busy = active || activeChat || aktivitaet;
       state.replaceChildren(el('span', 'ico ' + (busy ? 'run' : model ? model[0] : 'ok'), busy ? '' : model ? model[1] : '✓'),
-        el('span', '', active ? label(active) + (Number.isFinite(active.tps) ? ` · ${active.tps.toFixed(1)} Token/s` : '') : activeChat ? 'Bonsai arbeitet: ' + (activeChat.title || 'Chat') : idle));
+        el('span', '', aktivitaet ? aktivText(aktivitaet) : active ? label(active) + (Number.isFinite(active.tps) ? ` · ${active.tps.toFixed(1)} Token/s` : '') : activeChat ? 'Bonsai arbeitet: ' + (activeChat.title || 'Chat') : idle));
       const okCount = all.filter(j => kindOf(j) === 'ok').length;
       const errCount = all.filter(j => kindOf(j) === 'err').length;
       const bonsaiAus = bonsai === 'aus';

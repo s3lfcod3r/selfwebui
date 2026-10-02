@@ -47,6 +47,29 @@ def bonsai_zustand(now=None):
     _bonsai_cache.update(zeit=now, zustand=zustand)
     return zustand
 
+_aktiv_cache = {'zeit': 0.0, 'wert': None}
+
+def bonsai_aktivitaet(now=None):
+    """Was der Modellserver gerade tut: liest den Chat (Prompt-Verarbeitung) oder schreibt. None, wenn er frei ist."""
+    now = time.monotonic() if now is None else now
+    if now - _aktiv_cache['zeit'] < 1:
+        return _aktiv_cache['wert']
+    url = os.environ.get('BONSAI_URL', 'http://192.168.1.103:8085').rstrip('/') + '/slots'
+    wert = None
+    try:
+        with urllib.request.urlopen(url, timeout=2) as response:
+            for slot in json.load(response):
+                if not slot.get('is_processing'):
+                    continue
+                gesamt, fertig = int(slot.get('n_prompt_tokens') or 0), int(slot.get('n_prompt_tokens_processed') or 0)
+                geschrieben = max([int(t.get('n_decoded') or 0) for t in slot.get('next_token') or []] or [0])
+                wert = {'phase': 'schreibt' if geschrieben else 'liest', 'gelesen': fertig, 'gesamt': gesamt, 'geschrieben': geschrieben}
+                break
+    except (OSError, ValueError, TypeError):
+        wert = None
+    _aktiv_cache.update(zeit=now, wert=wert)
+    return wert
+
 def remote_jobs():
     key=Path('/data/brain/worker.key').read_text().strip()
     base=os.environ.get('BONSAI_WORKER_URL','http://OpenWebUI-Werkzeuge:8000').rstrip('/')
@@ -88,7 +111,8 @@ async def status(request: Request):
     except (OSError,ValueError):
         return JSONResponse({'error':'worker_unreachable'},status_code=503,headers={'Cache-Control':'no-store'})
     zustand = await asyncio.to_thread(bonsai_zustand)
-    return JSONResponse({'jobs': jobs[:30], 'scope': 'all-worker-jobs', 'bonsai': zustand}, headers={'Cache-Control': 'no-store'})
+    aktivitaet = await asyncio.to_thread(bonsai_aktivitaet)
+    return JSONResponse({'jobs': jobs[:30], 'scope': 'all-worker-jobs', 'bonsai': zustand, 'aktivitaet': aktivitaet}, headers={'Cache-Control': 'no-store'})
 
 @router.get('/worker/panel.js')
 async def script():

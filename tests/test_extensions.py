@@ -56,6 +56,19 @@ class BonsaiZustandTests(unittest.TestCase):
         with patch('urllib.request.urlopen',boom2):self.assertEqual(panel.bonsai_zustand(now=1006.0),'aus')
 
 
+class BonsaiAktivitaetTests(unittest.TestCase):
+    def check(self,body):
+        panel._aktiv_cache.update(zeit=0.0,wert=None)
+        with patch('urllib.request.urlopen',lambda url,timeout=0:io.BytesIO(body)):return panel.bonsai_aktivitaet(now=1000.0)
+    def test_reading_writing_and_idle(self):
+        lesen=b'[{"is_processing":true,"n_prompt_tokens":130000,"n_prompt_tokens_processed":1200,"next_token":[{"n_decoded":0}]}]'
+        schreiben=b'[{"is_processing":true,"n_prompt_tokens":10,"n_prompt_tokens_processed":10,"next_token":[{"n_decoded":42}]}]'
+        self.assertEqual(self.check(lesen),{'phase':'liest','gelesen':1200,'gesamt':130000,'geschrieben':0})
+        self.assertEqual(self.check(schreiben)['phase'],'schreibt')
+        self.assertIsNone(self.check(b'[{"is_processing":false}]'))
+        self.assertIsNone(self.check(b'kaputt'))
+
+
 import asyncio,json
 from unittest.mock import patch,Mock
 from fastapi import HTTPException
