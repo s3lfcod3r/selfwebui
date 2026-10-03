@@ -120,8 +120,8 @@ def sichern(path):
         n = 1
         while os.path.exists(ziel):
             ziel = os.path.join(ordner, time.strftime("%Y%m%d-%H%M%S") + "-%d.bak" % n); n += 1
-        shutil.copy2(path, ziel)
-        for alt in sorted(os.listdir(ordner))[:-20]:
+        shutil.copy(path, ziel)
+        for alt in sorted(os.listdir(ordner), key=lambda n: (os.path.getmtime(os.path.join(ordner, n)), n))[:-20]:
             os.remove(os.path.join(ordner, alt))
         return ziel
     except OSError:
@@ -213,13 +213,13 @@ UNDO_SCRIPT = HILFE + r'''
 import base64, sys
 path = base64.b64decode(sys.argv[1]).decode(); nur_liste = sys.argv[2] == "1"
 ordner = os.path.join(BACKUP, re.sub(r"[^A-Za-z0-9._-]+", "_", path.strip("/\\")))
-kopien = sorted(os.listdir(ordner)) if os.path.isdir(ordner) else []
+kopien = sorted(os.listdir(ordner), key=lambda n: (os.path.getmtime(os.path.join(ordner, n)), n)) if os.path.isdir(ordner) else []
 if nur_liste or not kopien:
     print(json.dumps({"pfad": path, "sicherungen": kopien[-10:]} if kopien else {"fehler": "Keine Sicherung für diese Datei: " + path})); sys.exit(0 if kopien else 3)
 letzte = os.path.join(ordner, kopien[-1])
 vorher = sichern(path) if os.path.isfile(path) else None   # auch das Zurücksetzen lässt sich zurücknehmen
 st = os.stat(path) if os.path.isfile(path) else None
-shutil.copy2(letzte, path)
+shutil.copy(letzte, path)
 if st:
     try: os.chown(path, st.st_uid, st.st_gid)
     except (OSError, AttributeError): pass
