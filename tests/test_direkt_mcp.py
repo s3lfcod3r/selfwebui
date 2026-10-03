@@ -65,6 +65,20 @@ class DirectMcpTests(unittest.TestCase):
         error, text = self.tool('doku_lesen', url='http://docs.python.org/3/')
         self.assertTrue(error); self.assertIn('https', text)
 
+    def test_doku_extra_domains_come_from_a_file_only_sven_edits(self):
+        import importlib.util
+        key = os.path.join(self.tmp, 'k2.key'); Path(key).write_text('x')
+        extra = os.path.join(self.tmp, 'extra.txt'); Path(extra).write_text('# Kommentar\nexample.org\n', encoding='utf-8')
+        os.environ['BONSAI_WORKER_KEY_FILE'] = key; os.environ['BONSAI_DOKU_EXTRA'] = extra
+        try:
+            spec = importlib.util.spec_from_file_location('mcp_doku2', os.path.join(os.path.dirname(__file__), '..', 'integrations', 'bonsai_direkt_mcp.py'))
+            module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+            erlaubt = module.doku_domaenen()
+        finally:
+            del os.environ['BONSAI_DOKU_EXTRA']
+        self.assertIn('example.org', erlaubt); self.assertNotIn('github.com', erlaubt); self.assertNotIn('huggingface.co', erlaubt)
+        self.assertIn('maxmind.github.io', erlaubt)
+
     def test_doku_text_strips_markup_and_scripts(self):
         import importlib.util
         key = os.path.join(self.tmp, 'k.key'); Path(key).write_text('x')
@@ -92,6 +106,17 @@ class DirectMcpTests(unittest.TestCase):
         self.assertTrue(json.loads(text)['syntax'].startswith('FEHLER'))
         error, text = self.tool('aenderung_rueckgaengig', pfad=os.path.join(self.tmp, 'nie-geaendert.txt'))
         self.assertTrue(error); self.assertIn('Keine Sicherung', text)
+
+    def test_project_check_finds_workspace_via_repo_path_mention(self):
+        werk = os.path.join(self.tmp, 'werk2'); os.makedirs(os.path.join(werk, 'repos', 'website')); os.makedirs(os.path.join(werk, 'computer', 'data', 'workspaces', 'SelfCoder'))
+        Path(werk, 'repos', 'website', 'ok.json').write_text('{}')
+        Path(werk, 'computer', 'data', 'workspaces', 'SelfCoder', 'PROJEKT.md').write_text('- **Arbeitsordner:** `/repos/website` auf dem Board\n- **Pr\u00fcfbefehl:** `echo nicht-docker`\n', encoding='utf-8')
+        os.environ['BONSAI_WERKSTATT'] = werk
+        try:
+            error, text = self.tool('projekt_pruefen', projekt='website')
+        finally:
+            del os.environ['BONSAI_WERKSTATT']
+        self.assertEqual(json.loads(text)['pruefbefehl'], 'echo nicht-docker')
 
     def test_project_check_finds_syntax_errors_and_skips_foreign_commands(self):
         werk = os.path.join(self.tmp, 'werk'); os.makedirs(os.path.join(werk, 'repos', 'demo')); os.makedirs(os.path.join(werk, 'computer', 'data', 'workspaces', 'Demo'))

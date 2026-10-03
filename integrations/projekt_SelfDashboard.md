@@ -1,6 +1,7 @@
 # Projekt SelfDashboard
 
 - **Was:** Selbst gehostetes Homelab-Dashboard (Next.js 15, TypeScript, Docker), Plugin-System mit `plugins-pack/` und `src/builtin-plugins/`, mehrere Benutzer, 2FA. GitHub: `s3lfcod3r/selfdashboard`. Läuft auf der Werkstatt (Board 2) unter http://192.168.1.21:3000.
+- **Prüfbefehl:** `docker run --rm --memory 2g -v /media/Safe-Storage/appdata/werkstatt/repos/selfdashboard:/src:ro node:22-bookworm-slim bash -c 'set -o pipefail; mkdir /w && cd /src && tar cf - --exclude=node_modules --exclude=out --exclude=.next --exclude=dist . | tar xf - -C /w && cd /w && npm ci --no-audit --no-fund --loglevel=error --ignore-scripts >/dev/null 2>&1 || { echo "npm install fehlgeschlagen"; exit 1; }; npm run lint 2>&1 | tail -15; lint=${PIPESTATUS[0]}; echo "lint=$lint"; exit $(($lint))'`
 - **Maßgebliche Arbeitskopie:** `/media/Safe-Storage/appdata/werkstatt/repos/selfdashboard`. Sie hat **keine** Git-Historie und ist neuer als GitHub (Stand GitHub: 24.09.2026). Nie darin `git init` oder `git push` ausführen.
 - **Vergleich mit GitHub:** übernimmt `gitpush-dateien` selbst (Bericht mit entfernten Zeilen). Ist eine Datei in der Arbeitskopie älter als auf GitHub, zeigt der Bericht das als Entfernung: dann die Datei nicht übertragen und Sven fragen.
 - **Arbeiten:** direkt im Ordner `selfdashboard` (Container `/repos/selfdashboard`). Ihn **nie** verschieben, ersetzen oder klonen. `selfdashboard-klon` daneben ist ein alter Klon und wird nicht benutzt.

@@ -254,9 +254,14 @@ antwort = {"projekt": name, "dateien_geprueft": geprueft, "syntaxfehler": fehler
 datei = None
 basis = os.path.join(WERK, "computer", "data", "workspaces")
 if os.path.isdir(basis):
-    for eintrag in os.listdir(basis):
-        if eintrag.lower() == name.lower() and os.path.isfile(os.path.join(basis, eintrag, "PROJEKT.md")):
-            datei = os.path.join(basis, eintrag, "PROJEKT.md")
+    for eintrag in sorted(os.listdir(basis)):
+        kandidat = os.path.join(basis, eintrag, "PROJEKT.md")
+        if not os.path.isfile(kandidat):
+            continue
+        if eintrag.lower() == name.lower():
+            datei = kandidat; break
+        if datei is None and ("/repos/" + name + "`") in open(kandidat, encoding="utf-8").read():
+            datei = kandidat
 befehl = None
 if datei:
     treffer = re.search(r"Prüfbefehl:\*\*\s*`([^`\n]+)`", open(datei, encoding="utf-8").read())
@@ -373,13 +378,24 @@ def als_nobody(befehl):
 
 
 DOKU_DOMAENEN = (
-    'maxmind.github.io', 'github.com', 'raw.githubusercontent.com', 'docs.github.com', 'docs.python.org', 'peps.python.org', 'pypi.org',
+    'maxmind.github.io', 'raw.githubusercontent.com', 'docs.github.com', 'docs.python.org', 'peps.python.org', 'pypi.org',
     'developer.mozilla.org', 'developer.android.com', 'kotlinlang.org', 'docs.gradle.org', 'docs.docker.com', 'docs.docker.io',
     'nextjs.org', 'react.dev', 'nodejs.org', 'electronjs.org', 'www.electronjs.org', 'fastapi.tiangolo.com', 'docs.pydantic.dev',
     'www.sqlite.org', 'nginx.org', 'git-scm.com', 'www.rfc-editor.org', 'datatracker.ietf.org', 'semver.org', 'docs.crowdsec.net',
     'thetvdb.github.io', 'api4.thetvdb.com', 'developer.themoviedb.org', 'api.emby.media', 'dev.emby.media', 'jellyfin.org', 'api.jellyfin.org',
-    'docs.prismml.com', 'huggingface.co', 'platform.openai.com', 'docs.anthropic.com', 'docs.llama.cpp')
+    'docs.prismml.com', 'platform.openai.com', 'docs.anthropic.com', 'docs.llama.cpp')
 DOKU_MAX = 12000
+# Weitere Seiten gibt nur Sven frei: eine Domain je Zeile in /data/brain/doku-extra.txt (github.com und huggingface.co
+# sind absichtlich nicht dauerhaft frei: dort stehen Texte beliebiger Nutzer, zum Beispiel Issues und Modellbeschreibungen).
+DOKU_EXTRA = os.environ.get('BONSAI_DOKU_EXTRA', '/data/brain/doku-extra.txt')
+
+
+def doku_domaenen():
+    try:
+        extra = [z.strip().lower() for z in Path(DOKU_EXTRA).read_text(encoding='utf-8').splitlines() if z.strip() and not z.startswith('#')]
+    except OSError:
+        extra = []
+    return tuple(DOKU_DOMAENEN) + tuple(extra)
 
 
 def doku_text(html):
@@ -397,9 +413,10 @@ def doku_lesen(args):
     if not isinstance(url, str) or not url.startswith('https://'):
         raise ValueError('url (https-Adresse) erforderlich')
     host = (urlparse(url).hostname or '').lower()
-    if not any(host == d or host.endswith('.' + d) for d in DOKU_DOMAENEN):
-        return {'fehler': 'Diese Seite ist nicht freigegeben: %s' % host, 'freigegeben': list(DOKU_DOMAENEN),
-                'hinweis': 'Nur Herstellerdokumentation. Frage Sven, wenn eine andere Quelle nötig ist.'}
+    erlaubt = doku_domaenen()
+    if not any(host == d or host.endswith('.' + d) for d in erlaubt):
+        return {'fehler': 'Diese Seite ist nicht freigegeben: %s' % host, 'freigegeben': list(erlaubt),
+                'hinweis': 'Nur Herstellerdokumentation. github.com und huggingface.co gibt Sven bei Bedarf frei (Zeile in doku-extra.txt). Frage ihn, wenn eine andere Quelle nötig ist.'}
     ab = max(0, int(args.get('ab_zeichen') or 0))
     anfrage = urllib.request.Request(url, headers={'User-Agent': 'bonsai-doku/1.0', 'Accept': 'text/html,text/plain,text/markdown,*/*;q=0.1'})
     with urllib.request.urlopen(anfrage, timeout=25) as antwort:

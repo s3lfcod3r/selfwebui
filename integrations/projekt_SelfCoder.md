@@ -1,6 +1,7 @@
 # Projekt SelfCoder (Webseite selfcoder.de)
 
 - **Was:** Die Portfolio-Webseite https://selfcoder.de: dunkle, animierte One-Page-Seite, die die Self-Projekte vorstellt (zweisprachig Deutsch/Englisch). Next.js mit statischem Export (`output: "export"`, Ordner `out`), Tailwind. GitHub: `s3lfcod3r/selfcoder` (öffentlich, Standardzweig `main`).
+- **Prüfbefehl:** `docker run --rm --memory 2g -v /media/Safe-Storage/appdata/werkstatt/repos/website:/src:ro node:22-bookworm-slim bash -c 'set -o pipefail; mkdir /w && cd /src && tar cf - --exclude=node_modules --exclude=out --exclude=.next --exclude=dist . | tar xf - -C /w && cd /w && npm ci --no-audit --no-fund --loglevel=error --ignore-scripts >/dev/null 2>&1 || { echo "npm install fehlgeschlagen"; exit 1; }; npm run lint 2>&1 | tail -15; lint=${PIPESTATUS[0]}; npm run build 2>&1 | tail -15; build=${PIPESTATUS[0]}; echo "lint=$lint build=$build"; exit $(($lint+$build))'`
 - **Wichtig zu Next.js:** `AGENTS.md` im Repo sagt, dass diese Next.js-Version Änderungen gegenüber deinem Wissen hat. Lies vor Code-Änderungen die passende Anleitung unter `node_modules/next/dist/docs/` und rate keine APIs.
 - **Hosting:** GitHub Pages. Die Aktion `Deploy to GitHub Pages` (`.github/workflows/deploy.yml`) baut bei jedem Push auf `main` (`npm ci`, `npm run build`) und veröffentlicht den Ordner `out`. Es gibt keinen Build auf dem Server. Die Domain `selfcoder.de` zeigt per DNS bei Strato (Nameserver `rzone.de`) auf GitHub Pages (am 01.10.2026: `185.199.108.153`), `www` leitet mit 301 auf `selfcoder.de` weiter. **Cloudflare ist für diese Domain nicht davor** (Antwort-Header: "Server: GitHub.com"). Sven nannte Cloudflare: falls es dazu etwas gibt (Tunnel, Mail, andere Domain), frage nach, statt zu raten.
 - **Arbeitsordner:** `/repos/website` auf dem Board (Git-Klon von `s3lfcod3r/selfcoder`; auf dem alten Tower hieß er `Github SelfCoder/website`). Nie verschieben, ersetzen, klonen oder löschen. Vor jeder Arbeit `docker exec GitHubTool gitpull website`.
@@ -18,7 +19,7 @@
 - **Nie:** Zugangsdaten, private Adressen oder E-Mail-Adressen, die nicht schon öffentlich auf der Seite stehen, in den Code schreiben. Nach Zugangsdaten suchen, bevor etwas veröffentlicht wird.
 
 ## Bekannte offene Punkte
-- (noch keine eingetragen: bei der ersten Prüfung belegt ergänzen)
+- ESLint meldet 7 Fehler (Prüfbefehl, Stand 03.10.2026): `Logo/make-logo-psd.cjs:3-6` (no-require-imports: Hilfsskript, in der ESLint-Konfiguration ignorieren), `app/datenschutz/page.tsx:103` (zweimal react/no-unescaped-entities: Anführungszeichen als `&quot;` schreiben), `components/LanguageProvider.tsx:22` (react-hooks/set-state-in-effect). Der Build ist grün. Beheben, Prüfbefehl wiederholen, Version/Push nur auf Svens Auftrag.
 
 ## Gelernt (nicht wiederholen)
 - Erfundene Befunde sind der häufigste Fehler: nur melden, was du mit Datei:Zeile belegen kannst.

@@ -1,4 +1,4 @@
-// Löschschutz: Vor dem Löschen eines Arbeitsbereichs kommen zwei Bestätigungs-Popups hintereinander.
+// Löschschutz: Vor dem Löschen eines Arbeitsbereichs kommen zwei Bestätigungs-Popups hintereinander, vor dem Löschen eines Chats eines.
 // Die Oberfläche löscht mit DELETE /api/state/workspace?path=...; hier wird genau dieser Aufruf abgefangen.
 // Ablehnen bricht den Aufruf ab, der Arbeitsbereich bleibt in der Seitenleiste.
 // Gelöscht wird nur der Eintrag in der Seitenleiste; Ordner und Dateien auf dem Board bleiben liegen.
@@ -10,6 +10,11 @@
     try {
       const url = String((eingabe && eingabe.url) || eingabe);
       const methode = String((optionen && optionen.method) || (eingabe && eingabe.method) || 'GET').toUpperCase();
+      if (methode === 'DELETE' && /\/api\/chats\/[0-9a-fA-F-]{20,}(\?|$)/.test(url)) {
+        if (!window.confirm('Diesen Chat wirklich löschen?\n\nDer Verlauf ist danach weg. Dateien im Arbeitsbereich bleiben liegen.')) {
+          return Promise.reject(new DOMException('Löschen abgebrochen', 'AbortError'));
+        }
+      }
       if (methode === 'DELETE' && /\/api\/state\/workspace\?/.test(url)) {
         const treffer = url.match(/[?&]path=([^&]+)/);
         const pfad = treffer ? decodeURIComponent(treffer[1]) : '';

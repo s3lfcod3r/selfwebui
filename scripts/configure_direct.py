@@ -23,13 +23,15 @@ WORKSPACES = {'RTX2000': None, 'SelfWG': 'projekt_SelfWG.md', 'SelfDashboard': '
               'SelfStore': 'projekt_SelfStore.md', 'SelfMailer': 'projekt_SelfMailer.md', 'SelfRemote': 'projekt_SelfRemote.md', 'SelfAuthenticator': 'projekt_SelfAuthenticator.md', 'SelfArchiver': 'projekt_SelfArchiver.md', 'SelfFon': 'projekt_SelfFon.md', 'SelfMediaHub': 'projekt_SelfMediaHub.md', 'SelfPoolTracker': 'projekt_SelfPoolTracker.md', 'SelfScreen': 'projekt_SelfScreen.md', 'SelfThreatMap': 'projekt_SelfThreatMap.md', 'SelfGuard': 'projekt_SelfGuard.md', 'SelfCoder': 'projekt_SelfCoder.md'}
 MODELS = ['bonsai-2-27b', 'RTX2000/bonsai-2-27b']
 BUILTIN_ALLE = ('files', 'terminal', 'web', 'browser', 'memory', 'chats', 'skills', 'tasks', 'automations', 'images', 'subagents', 'notifications')
-BUILTIN_AN = ('tasks', 'chats', 'memory', 'notifications', 'automations', 'subagents', 'browser')
+BUILTIN_AN = ('tasks', 'chats', 'memory', 'notifications', 'automations', 'subagents')   # 'browser' liefert hier keine Werkzeuge, bleibt aus
 # Tool-heavy work: lower temperature than the 1.0 of the model card; other values from the card.
 PROJEKT_HINWEIS = (
     "\n\nPROJEKTREGELN\n"
     "Zu Beginn jeder Aufgabe in einem Projekt zuerst die Projektdatei deines Arbeitsbereichs lesen, falls sie existiert: "
     "cat /media/Safe-Storage/appdata/werkstatt/computer/data/workspaces/<Name>/PROJEKT.md. Der Arbeitsbereich <Name> steht in deinem Kontext "
     "(Pfad /data/workspaces/<Name>). Die Datei nennt Klon, Version, Schlüssel-Referenz, bekannte Punkte und Gelerntes. Danach arbeiten.\n")
+STATUS_START = ("## Aufgaben\n- Erste Prüfung des Projekts — offen: Struktur, Git-Stand, README, Version und Fehler prüfen, "
+                "Befunde mit Datei:Zeile belegen, PROJEKT.md ergänzen\n\n## Offene Fragen\n- (keine)\n")
 COMPACT_TOKENS = 70000  # Model server has 262144 tokens of context, but on the RTX 2000E replies slow down and Bonsai gets stuck in thinking
 #                         above ~50-100k tokens (observed 02.-03.10.2026); compacting at 70k keeps chats short. Raise it again if summaries lose too much.
 REQUEST_PARAMS = {'max_tokens': 16384, 'temperature': 0.7, 'top_p': 0.95, 'top_k': 20, 'min_p': 0.05}
@@ -170,6 +172,9 @@ def main():
         if project_file and (SOURCE / project_file).is_file():
             text += '\n\n' + (SOURCE / project_file).read_text(encoding='utf-8')
         target.write_text(text, encoding='utf-8')
+        # STATUS.md-Grundgerüst, damit "Neuer Chat mit Stand" bei neuen Projekten etwas zu lesen hat (nie überschreiben).
+        if project_file and not (directory / 'STATUS.md').exists():
+            (directory / 'STATUS.md').write_text(STATUS_START, encoding='utf-8')
         # PROJEKT.md nur anlegen, nie überschreiben: Bonsai trägt dort Gelerntes ein.
         if project_file and (SOURCE / project_file).is_file() and not (directory / 'PROJEKT.md').exists():
             (directory / 'PROJEKT.md').write_text((SOURCE / project_file).read_text(encoding='utf-8'), encoding='utf-8')
