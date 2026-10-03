@@ -417,6 +417,13 @@ def doku_lesen(args):
     return ergebnis
 
 
+# Dateien per Shell ändern (sed -i, tee, > datei, cp/mv auf eine .bak-Kopie) umgeht Sicherung und Syntaxprüfung der
+# Werkzeuge datei_ersetzen/datei_schreiben. Der Befehl läuft trotzdem, aber das Ergebnis trägt einen Hinweis.
+SHELL_AENDERUNG = re.compile(r"(\bsed\s+(-[A-Za-z]*i|--in-place)|\btee\s|(?<![<>0-9&])>>?\s*['\"]?/media/\S+|\bcp\s+\S+\s+\S+\.bak)")
+AENDERUNGS_HINWEIS = ('Dateien änderst du mit datei_ersetzen oder datei_schreiben, nicht per Shell: nur diese Werkzeuge sichern die alte Fassung '
+                      '(rückgängig mit aenderung_rueckgaengig) und prüfen die Syntax. Lege keine eigenen .bak-Dateien an.')
+
+
 def run(name, args):
     if name not in TOOLS:
         raise ValueError('Unbekanntes Werkzeug: ' + name)
@@ -466,7 +473,10 @@ def run(name, args):
         payload['timeout'] = timeout
         if name == 'befehl_werkstatt':
             payload['befehl'] = als_nobody(payload['befehl'])
-    return post('/' + name, payload, timeout + 20)
+    ergebnis = post('/' + name, payload, timeout + 20)
+    if name == 'befehl_werkstatt' and isinstance(ergebnis, dict) and SHELL_AENDERUNG.search(args.get('befehl', '')):
+        ergebnis = {**ergebnis, 'hinweis_aenderung': AENDERUNGS_HINWEIS}
+    return ergebnis
 
 
 def shlex_quote(text):

@@ -107,6 +107,16 @@ class DirectMcpTests(unittest.TestCase):
         self.assertIn('kaputt.py', antwort['syntaxfehler'][0]); self.assertIn('pruefbefehl_hinweis', antwort)
         self.assertNotIn('pruefbefehl_exit', antwort)
 
+    def test_shell_edits_get_a_hint_but_reads_do_not(self):
+        datei = os.path.join(self.tmp, 'x.txt'); Path(datei).write_text('a\n')
+        for befehl in ("sed -i 's/a/b/' " + datei, "echo neu > /media/Safe-Storage/appdata/werkstatt/test-nicht-da.txt 2>/dev/null; true",
+                       "cp " + datei + " " + datei + ".bak"):
+            error, text = self.tool('befehl_werkstatt', befehl=befehl)
+            self.assertIn('hinweis_aenderung', json.loads(text), befehl)
+        for befehl in ("cat " + datei, "grep a " + datei + " | head -3", "ls -la " + self.tmp + " 2>&1", "git log --oneline 2>/dev/null; true"):
+            error, text = self.tool('befehl_werkstatt', befehl=befehl)
+            self.assertNotIn('hinweis_aenderung', json.loads(text), befehl)
+
     def test_replace_changes_exactly_one_place_and_reports_hashes(self):
         path = self.file('eins\nzwei\ndrei\n')
         error, text = self.tool('datei_ersetzen', pfad=path, alt='zwei', neu='2')

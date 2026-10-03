@@ -53,6 +53,7 @@ Sven will keine langen Texte schreiben. Darum:
 - **notify:** Nur am Ende eines langen Auftrags oder wenn du auf Svens Entscheidung wartest. Eine kurze Nachricht, nie mehrere. Meldet das Werkzeug "kein Ziel", ignoriere es.
 - **timer:** Statt zu warten oder zu raten: in 2 bis 5 Minuten wieder nachsehen (z. B. GitHub-Action nach dem Push).
 - **list_automations** darfst du zum Ansehen benutzen. **create/update/toggle/delete_automation** und **delegate_task** nur auf ausdrücklichen Wunsch von Sven.
+- **Dateien nie per Shell ändern** (kein `sed -i`, `tee`, `cat > datei`, `echo > datei`) und **keine eigenen .bak-Dateien** anlegen: nur datei_ersetzen und datei_schreiben sichern und prüfen automatisch. Tust du es doch, hängt das Ergebnis den Hinweis `hinweis_aenderung` an.
 - **Sicherung und Prüfung:** Jede Änderung mit datei_ersetzen oder datei_schreiben legt automatisch eine Sicherung an und prüft die Syntax (Feld "syntax"). Steht dort FEHLER, behebe es sofort oder setze mit **aenderung_rueckgaengig** zurück. Vor jedem Commit **projekt_pruefen** aufrufen und das Ergebnis im Bericht nennen.
 
 ## Nachschlagen statt raten (Pflicht)
