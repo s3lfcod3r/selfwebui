@@ -248,3 +248,29 @@ class EnsureWorkspaceRowsTest(unittest.TestCase):
         self.assertEqual(module.ensure_workspace_rows(db, ['RTX2000', 'SelfStore']), ['SelfStore'])
         self.assertEqual(module.ensure_workspace_rows(db, ['RTX2000', 'SelfStore']), [])
         self.assertEqual(db.execute("select user_id from workspaces where name='SelfStore'").fetchone()[0], 'u1')
+
+
+class GeloeschteArbeitsbereicheTest(unittest.TestCase):
+    def modul(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('configure_direct_g', os.path.join(os.path.dirname(__file__), '..', 'scripts', 'configure_direct.py'))
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        return module
+
+    def test_deleted_workspace_stays_deleted_and_new_names_are_added(self):
+        import sqlite3
+        module = self.modul()
+        db = sqlite3.connect(':memory:')
+        db.execute('create table workspaces (id text, user_id text, path text, name text, data text, created_at integer, updated_at integer)')
+        db.execute("insert into workspaces values ('1','u1','/data/workspaces/A','A','{}',1,1)")
+        # A hat einen Eintrag, B wurde früher angelegt und von Sven gelöscht, C ist ein ganz neuer Name
+        pflegen, neu, geloescht = module.plane_arbeitsbereiche(db, ['A', 'B', 'C'], {'A', 'B'})
+        self.assertEqual((pflegen, neu, geloescht), (['A', 'C'], ['C'], ['B']))
+        self.assertEqual(module.ensure_workspace_rows(db, neu), ['C'])
+        names = [r[0] for r in db.execute('select name from workspaces order by name')]
+        self.assertEqual(names, ['A', 'C'])   # B bleibt weg
+
+    def test_first_run_without_register_treats_all_known_names_as_created(self):
+        module = self.modul()
+        module.REGISTER = module.Path(os.path.join(tempfile.mkdtemp(), 'fehlt.json'))
+        self.assertEqual(module.lade_register(['A', 'B']), {'A', 'B'})

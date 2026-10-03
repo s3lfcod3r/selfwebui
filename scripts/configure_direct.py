@@ -72,6 +72,34 @@ def install_tools():
         print('Tool file updated:', name)
 
 
+REGISTER = DATA / 'brain' / 'arbeitsbereiche-bekannt.json'
+
+
+def lade_register(names):
+    """Namen, für die schon einmal ein Arbeitsbereich angelegt wurde. Gibt es die Datei noch nicht (erster Lauf),
+    gelten alle bisherigen Namen als schon angelegt: was Sven vorher gelöscht hat, bleibt gelöscht."""
+    try:
+        return set(json.loads(REGISTER.read_text(encoding='utf-8')))
+    except (OSError, ValueError, TypeError):
+        return set(names)
+
+
+def plane_arbeitsbereiche(connection, names, bekannt):
+    """(pflegen, neu, geloescht): pflegen = Eintrag vorhanden oder ganz neuer Name, neu = noch nie angelegt,
+    geloescht = früher angelegt, jetzt ohne Eintrag (Sven hat ihn gelöscht): wird nicht wieder angelegt."""
+    vorhanden = {row[0] for row in connection.execute('select path from workspaces')}
+    pflegen, neu, geloescht = [], [], []
+    for name in names:
+        if '/data/workspaces/' + name in vorhanden:
+            pflegen.append(name)
+        elif name in bekannt:
+            geloescht.append(name)
+        else:
+            pflegen.append(name)
+            neu.append(name)
+    return pflegen, neu, geloescht
+
+
 def ensure_workspace_rows(connection, names):
     """Trägt fehlende Arbeitsbereiche in die Datenbank ein (die Seitenleiste zeigt nur Einträge, nicht Ordner)."""
     first = connection.execute('select user_id from workspaces order by created_at limit 1').fetchone()
@@ -123,7 +151,11 @@ def main():
     toml = DATA / 'config.toml'
     shutil.copy(toml, str(toml) + '.vor-direkt-' + stamp)
     write_toml(toml, {'tool_servers': servers, 'chat.models': models})
+    bekannt = lade_register(WORKSPACES)
+    pflegen, neu_namen, geloescht = plane_arbeitsbereiche(connection, WORKSPACES, bekannt)
     for name, project_file in WORKSPACES.items():
+        if name not in pflegen:
+            continue   # von Sven gelöscht: Ordner und Regeln nicht wieder anlegen
         directory = DATA / 'workspaces' / name
         directory.mkdir(parents=True, exist_ok=True)
         target = directory / 'AGENTS.md'
@@ -136,8 +168,11 @@ def main():
         # PROJEKT.md nur anlegen, nie überschreiben: Bonsai trägt dort Gelerntes ein.
         if project_file and (SOURCE / project_file).is_file() and not (directory / 'PROJEKT.md').exists():
             (directory / 'PROJEKT.md').write_text((SOURCE / project_file).read_text(encoding='utf-8'), encoding='utf-8')
-    added = ensure_workspace_rows(connection, WORKSPACES)
-    print('Configured: tool server heim, models', MODELS, ', workspaces', list(WORKSPACES), ', neu in der Seitenleiste', added)
+    added = ensure_workspace_rows(connection, neu_namen)
+    REGISTER.parent.mkdir(parents=True, exist_ok=True)
+    REGISTER.write_text(json.dumps(sorted(bekannt | set(pflegen))), encoding='utf-8')
+    print('Configured: tool server heim, models', MODELS, ', workspaces', pflegen, ', neu in der Seitenleiste', added,
+          ', gelöscht gelassen', geloescht)
 
 
 if __name__ == '__main__':
