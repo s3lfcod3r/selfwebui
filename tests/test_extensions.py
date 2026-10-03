@@ -16,6 +16,19 @@ class TelemetryTests(unittest.TestCase):
 
 import fehlerchats
 
+class LeereAntwortTests(unittest.TestCase):
+    def test_only_completed_reasoning_without_text_counts(self):
+        denken='[{"type":"reasoning","status":"completed","content":[]}]'
+        self.assertTrue(fehlerchats.leere_antwort('',denken))
+        self.assertTrue(fehlerchats.leere_antwort('  ',[{'type':'reasoning','status':'completed'}]))
+        self.assertFalse(fehlerchats.leere_antwort('Hallo',denken))                                 # hat geantwortet
+        self.assertFalse(fehlerchats.leere_antwort('','[{"type":"reasoning","status":"in_progress"}]'))  # abgebrochen
+        self.assertFalse(fehlerchats.leere_antwort('','[{"type":"reasoning","status":"completed"},{"type":"function_call"}]'))
+        self.assertFalse(fehlerchats.leere_antwort('',''))
+        self.assertFalse(fehlerchats.leere_antwort('','kaputt'))
+        self.assertFalse(fehlerchats.leere_antwort('','[]'))
+
+
 class FehlerchatTests(unittest.TestCase):
     def test_error_text_and_user_abort(self):
         self.assertEqual(fehlerchats.fehler_text({'error':' Boom '}),'Boom')

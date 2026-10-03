@@ -3,6 +3,7 @@
 Es wird nichts gesendet und nichts angestoßen. Die Arbeiter-Spalte zeigt diese Chats rot an; Sven schreibt dann
 "weiter" in den Chat und Bonsai analysiert und macht weiter (Regel in direkt_agents.md).
 """
+import json
 import logging
 import time
 
@@ -16,6 +17,7 @@ router = APIRouter(prefix='/api/selfwebui')
 FENSTER_MS = 24 * 3600 * 1000      # Fehler der letzten 24 Stunden
 CACHE_S = 4
 IGNORIEREN = ('cancel', 'abort', 'stopp', 'user request')
+LEERE_ANTWORT = 'Bonsai hat nur gedacht und keine Antwort gegeben. Schreib "weiter".'
 _cache = {'zeit': 0.0, 'daten': {}}
 
 
@@ -23,6 +25,19 @@ def fehler_text(meta):
     """Fehlertext aus den Metadaten einer Antwort, sonst leerer Text."""
     value = meta.get('error') if isinstance(meta, dict) else None
     return str(value).strip() if value else ''
+
+
+def leere_antwort(content, output):
+    """Antwort ohne Text und ohne Werkzeug, die nur aus abgeschlossenem Denken besteht (Bonsai hat sich festgedacht)."""
+    if str(content or '').strip():
+        return False
+    try:
+        items = json.loads(output) if isinstance(output, str) else output
+    except ValueError:
+        return False
+    if not isinstance(items, list) or not items:
+        return False
+    return all(isinstance(i, dict) and i.get('type') == 'reasoning' and i.get('status') == 'completed' for i in items)
 
 
 def ignorierbar(text):
@@ -49,12 +64,15 @@ async def lese_fehler(jetzt_ms=None):
             ChatMessage.role == 'assistant', ChatMessage.created_at > jetzt_ms - FENSTER_MS))).scalars().all()
     chats = {}
     for msg in rows:
-        if not fehler_text(msg.meta):
+        leer = msg.done and leere_antwort(msg.content, msg.output)
+        if not fehler_text(msg.meta) and not leer:
             continue
         chat = await Chat.get_by_id(msg.chat_id)
         if not chat or is_internal_chat(chat.meta):
             continue
         text = ist_fehlerfall(msg.role, msg.done, msg.meta, msg.id, chat.current_message_id)
+        if not text and leer and chat.current_message_id == msg.id:
+            text = LEERE_ANTWORT
         if text:
             chats[chat.id] = {'fehler': text[:200], 'zeit': max(msg.created_at or 0, chat.updated_at or 0)}
     return chats
