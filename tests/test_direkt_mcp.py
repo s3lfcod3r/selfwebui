@@ -24,6 +24,37 @@ class Worker(BaseHTTPRequestHandler):
         self.send_response(200); self.send_header('Content-Length', str(len(data))); self.end_headers(); self.wfile.write(data)
 
 
+class BildStub(BaseHTTPRequestHandler):
+    """Stand-in für den Bild-Dienst (Port 8111) und für den Bonsai-Server (/v1/chat/completions)."""
+    gesehen = []
+    def log_message(self, *args): pass
+    def antwort(self, code, daten, typ='application/json'):
+        koerper = daten if isinstance(daten, bytes) else json.dumps(daten).encode()
+        self.send_response(code); self.send_header('Content-Type', typ); self.send_header('Content-Length', str(len(koerper))); self.end_headers(); self.wfile.write(koerper)
+    def do_GET(self):
+        BildStub.gesehen.append(('GET', self.path))
+        if self.path.startswith('/status/20261003-120000-abcd'):
+            return self.antwort(200, {'zustand': 'fertig', 'meldung': 'Bild fertig', 'dateien': ['ergebnis-0.png', 'ergebnis-1.png']})
+        if self.path.startswith('/status/'):
+            return self.antwort(200, {'zustand': 'rechnet', 'meldung': 'Qwen-Image 2.1 rechnet'})
+        if self.path.startswith('/ergebnis/'):
+            return self.antwort(200, b'PNG-test', 'image/png')
+        if self.path == '/liste':
+            return self.antwort(200, {'auftraege': []})
+        self.antwort(404, {'fehler': 'nicht gefunden'})
+    def do_PUT(self):
+        BildStub.gesehen.append(('PUT', self.path, self.rfile.read(int(self.headers['Content-Length']))))
+        self.antwort(200, {'vorlage': self.path.split('/')[-1]})
+    def do_POST(self):
+        koerper = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        BildStub.gesehen.append(('POST', self.path, koerper))
+        if self.path == '/auftrag':
+            return self.antwort(200, {'id': '20261003-120000-abcd', 'zustand': 'wartet', 'hinweis': 'ok'})
+        if self.path == '/v1/chat/completions':
+            return self.antwort(200, {'choices': [{'message': {'content': 'Ein roter Leuchtturm bei Sturm.'}}]})
+        self.antwort(404, {'fehler': 'nicht gefunden'})
+
+
 class DirectMcpTests(unittest.TestCase):
     def setUp(self):
         Worker.calls = []
@@ -55,7 +86,7 @@ class DirectMcpTests(unittest.TestCase):
 
     def test_tools_are_flat_and_do_not_include_the_planner_tool(self):
         names = [t['name'] for t in self.rpc('tools/list')['tools']]
-        self.assertEqual(names, ['befehl_werkstatt', 'befehl_zimaboard', 'ordner_auflisten', 'datei_lesen', 'datei_schreiben', 'datei_ersetzen', 'doku_lesen', 'aenderung_rueckgaengig', 'projekt_pruefen', 'arbeitsbereich_anlegen'])
+        self.assertEqual(names, ['befehl_werkstatt', 'befehl_zimaboard', 'ordner_auflisten', 'datei_lesen', 'datei_schreiben', 'datei_ersetzen', 'doku_lesen', 'aenderung_rueckgaengig', 'projekt_pruefen', 'bild_auftrag', 'bild_status', 'bild_holen', 'bild_ansehen', 'arbeitsbereich_anlegen'])
 
     def test_doku_lesen_refuses_foreign_domains_and_plain_http(self):
         error, text = self.tool('doku_lesen', url='https://evil.example.com/x')
@@ -141,6 +172,91 @@ class DirectMcpTests(unittest.TestCase):
         for befehl in ("cat " + datei, "grep a " + datei + " | head -3", "ls -la " + self.tmp + " 2>&1", "git log --oneline 2>/dev/null; true"):
             error, text = self.tool('befehl_werkstatt', befehl=befehl)
             self.assertNotIn('hinweis_aenderung', json.loads(text), befehl)
+
+    def mit_bildstub(self):
+        """Startet den Stub und einen frischen MCP-Server, der ihn als Bild-Dienst und als Bonsai benutzt."""
+        BildStub.gesehen = []
+        stub = HTTPServer(('127.0.0.1', 0), BildStub)
+        threading.Thread(target=stub.serve_forever, daemon=True).start()
+        url = 'http://127.0.0.1:%d' % stub.server_port
+        proc = subprocess.Popen([sys.executable, str(INTEGRATIONS / 'bonsai_direkt_mcp.py')], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            text=True, encoding='utf-8', env={**os.environ, 'PYTHONIOENCODING': 'utf-8', 'BONSAI_WORKER_KEY_FILE': self.key,
+            'BONSAI_WORKER_URL': 'http://127.0.0.1:%d' % self.server.server_port, 'BILD_DIENST_URL': url, 'BONSAI_URL': url, 'BONSAI_WERKSTATT_BASIS': self.tmp.replace('\\', '/')})
+        def tool(name, **args):
+            proc.stdin.write(json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': name, 'arguments': args}}) + '\n'); proc.stdin.flush()
+            r = json.loads(proc.stdout.readline())['result']; return r['isError'], r['content'][0]['text']
+        def ende():
+            proc.kill(); proc.wait(); proc.stdin.close(); proc.stdout.close(); stub.shutdown(); stub.server_close()
+        return tool, ende
+
+    def test_image_job_text_to_image_and_status(self):
+        tool, ende = self.mit_bildstub()
+        try:
+            error, text = tool('bild_auftrag', prompt='A red lighthouse in a storm', breite=1024, hoehe=768, anzahl=2, seed=7)
+            self.assertFalse(error); self.assertEqual(json.loads(text)['id'], '20261003-120000-abcd')
+            gesendet = [e for e in BildStub.gesehen if e[0] == 'POST' and e[1] == '/auftrag'][0][2]
+            self.assertEqual((gesendet['modus'], gesendet['breite'], gesendet['hoehe'], gesendet['anzahl'], gesendet['seed']), ('neu', 1024, 768, 2, 7))
+            error, text = tool('bild_status', id='20261003-120000-abcd'); self.assertEqual(json.loads(text)['zustand'], 'fertig')
+            error, text = tool('bild_status', id='20261003-999999-ffff'); self.assertEqual(json.loads(text)['zustand'], 'rechnet')
+            error, text = tool('bild_status', id='../etc/passwd'); self.assertTrue(error)
+            error, text = tool('bild_auftrag', prompt='x'); self.assertTrue(error)
+        finally:
+            ende()
+
+    def test_image_job_edit_uploads_the_template_first(self):
+        tool, ende = self.mit_bildstub()
+        try:
+            error, text = tool('bild_auftrag', prompt='Make the sky orange', modus='bearbeiten', vorlage_pfad='/tmp/nicht/unter/werkstatt.png')
+            self.assertTrue(error); self.assertIn(self.tmp.replace('\\', '/').replace('/', '\\\\') if False else 'absoluter Pfad unter', text)
+            error, text = tool('bild_auftrag', prompt='Make the sky orange', modus='bearbeiten', vorlage_pfad=self.tmp.replace('\\', '/') + '/../x.png')
+            self.assertTrue(error)
+            error, text = tool('bild_auftrag', prompt='Make the sky orange', modus='bearbeiten', vorlage_pfad=self.tmp.replace('\\', '/') + '/a.txt')
+            self.assertTrue(error); self.assertIn('png', text)
+        finally:
+            ende()
+
+    def test_image_edit_upload_goes_to_the_service_before_the_job(self):
+        tool, ende = self.mit_bildstub()
+        try:
+            vorlage = self.tmp.replace('\\', '/') + '/ref.png'; Path(vorlage).write_bytes(b'PNG-vorlage')
+            error, text = tool('bild_auftrag', prompt='Make the sky orange', modus='bearbeiten', vorlage_pfad=vorlage)
+            self.assertFalse(error, text)
+            aufrufe = [e for e in BildStub.gesehen if e[0] in ('PUT', 'POST') and e[1] != '/v1/chat/completions']
+            self.assertEqual(aufrufe[0][0], 'PUT'); self.assertTrue(aufrufe[0][1].startswith('/vorlage/vorlage-')); self.assertIn(b'vorlage', aufrufe[0][2])
+            self.assertEqual(aufrufe[1][2]['vorlage'], aufrufe[0][1].split('/')[-1]); self.assertEqual(aufrufe[1][2]['modus'], 'bearbeiten')
+        finally:
+            ende()
+
+    def test_image_fetch_refuses_unfinished_jobs_and_downloads_finished_ones(self):
+        tool, ende = self.mit_bildstub()
+        try:
+            error, text = tool('bild_holen', id='20261003-999999-ffff', ziel_ordner=self.tmp.replace('\\', '/') + '/bilder')
+            self.assertIn('noch nicht fertig', text)
+            error, text = tool('bild_holen', id='20261003-120000-abcd', ziel_ordner='/tmp/ausserhalb')
+            self.assertTrue(error)
+            error, text = tool('bild_holen', id='20261003-120000-abcd', ziel_ordner=self.tmp.replace('\\', '/') + '/bilder')
+            self.assertFalse(error, text)
+            antwort = json.loads(text)
+            self.assertEqual(len(antwort['bilder']), 2)
+            for pfad in antwort['bilder']:
+                self.assertTrue(os.path.isfile(pfad)); self.assertEqual(Path(pfad).read_bytes(), b'PNG-test')
+        finally:
+            ende()
+
+    def test_image_view_asks_bonsai_with_the_picture(self):
+        tool, ende = self.mit_bildstub()
+        try:
+            error, text = tool('bild_ansehen', pfad='/tmp/draussen.png'); self.assertTrue(error)
+            bild = self.tmp.replace('\\', '/') + '/b.png'; Path(bild).write_bytes(b'PNG-bild')
+            error, text = tool('bild_ansehen', pfad=bild, frage='Passt das zum Prompt?')
+            self.assertFalse(error, text); self.assertIn('Leuchtturm', json.loads(text)['antwort'])
+            gesendet = [e for e in BildStub.gesehen if e[0] == 'POST' and e[1] == '/v1/chat/completions'][0][2]
+            inhalt = gesendet['messages'][0]['content']
+            self.assertEqual(inhalt[0]['text'], 'Passt das zum Prompt?'); self.assertTrue(inhalt[1]['image_url']['url'].startswith('data:image/png;base64,'))
+            Path(self.tmp.replace('\\', '/') + '/text.txt').write_text('kein bild')
+            error, text = tool('bild_ansehen', pfad=self.tmp.replace('\\', '/') + '/text.txt'); self.assertTrue(error)
+        finally:
+            ende()
 
     def test_replace_changes_exactly_one_place_and_reports_hashes(self):
         path = self.file('eins\nzwei\ndrei\n')

@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -67,6 +68,25 @@ TOOLS = {
     'projekt_pruefen': ('Prüft ein Projekt unter repos: Syntax aller Python-, JSON-, TOML-, XML-, Shell- und JS-Dateien (ohne node_modules, build usw.) und führt, falls in der PROJEKT.md der Zeile "Prüfbefehl" ein docker-Befehl steht, auch diesen aus. Vor jedem Commit und Push aufrufen.', {
         'type': 'object', 'required': ['projekt'], 'properties': {
             'projekt': prop('string', 'Ordnername unter repos, z. B. selfmediahub.')}}),
+    'bild_auftrag': ('Legt einen BILDAUFTRAG für Qwen-Image 2.1 an (neues Bild aus Text oder ein vorhandenes Bild umbauen). Die Karte hat nicht Platz für Bonsai UND das Bildmodell: der Bild-Dienst entlädt Bonsai, sobald du deinen Zug beendet hast, rechnet das Bild (ca. 1 bis 2 Minuten) und lädt Bonsai wieder. DARUM: nach diesem Aufruf sofort mit einem kurzen Satz an Sven enden ("Bildauftrag <id> läuft, sag weiter, wenn die Glocke meldet, dass das Bild fertig ist"), nichts weiter aufrufen, nicht warten. Prompt am besten englisch, konkret (Motiv, Stil, Licht, Bildausschnitt).', {
+        'type': 'object', 'required': ['prompt'], 'properties': {
+            'prompt': prop('string', 'Bildbeschreibung (3 bis 2000 Zeichen).'),
+            'modus': prop('string', '"neu" (Standard) oder "bearbeiten" (Referenzbild umbauen, Größe folgt dem Bild).'),
+            'vorlage_pfad': prop('string', 'Nur bei bearbeiten: absoluter Pfad des Referenzbilds auf der Werkstatt (png/jpg bis 25 MB).'),
+            'breite': prop('integer', 'Nur bei neu: 512 bis 1536 in 16er-Schritten, Standard 1024.'),
+            'hoehe': prop('integer', 'Nur bei neu: 512 bis 1536 in 16er-Schritten, Standard 1024.'),
+            'anzahl': prop('integer', 'Varianten, 1 bis 4 (Standard 1).'),
+            'seed': prop('integer', 'Zufallszahl; gleicher Seed und Prompt ergeben dasselbe Bild.')}}),
+    'bild_status': ('Zeigt den Stand eines Bildauftrags (wartet, laedt, rechnet, fertig, fehler) und die Dateinamen. Ohne id: die letzten Aufträge.', {
+        'type': 'object', 'properties': {'id': prop('string', 'Auftrags-ID aus bild_auftrag.')}}),
+    'bild_holen': ('Kopiert die fertigen Bilder eines Auftrags in einen Ordner auf der Werkstatt (z. B. den Arbeitsbereich), damit Sven sie im Datei-Reiter sieht und du sie mit bild_ansehen prüfen kannst. Liefert die Pfade.', {
+        'type': 'object', 'required': ['id', 'ziel_ordner'], 'properties': {
+            'id': prop('string', 'Auftrags-ID.'),
+            'ziel_ordner': prop('string', 'Absoluter Ordner unter /media/Safe-Storage/appdata/werkstatt (wird angelegt), z. B. den Arbeitsbereich plus /bilder.')}}),
+    'bild_ansehen': ('Schaut ein Bild an (png/jpg) und beantwortet eine Frage dazu als Text, z. B. ob es zum Prompt passt oder was zu ändern ist. Für Bilder, die du selbst nicht im Chat siehst.', {
+        'type': 'object', 'required': ['pfad'], 'properties': {
+            'pfad': prop('string', 'Absoluter Pfad des Bilds auf der Werkstatt.'),
+            'frage': prop('string', 'Was du wissen willst (Standard: beschreibe das Bild genau).')}}),
     'arbeitsbereich_anlegen': ('Legt für ein NEUES Thema oder Projekt einen eigenen Arbeitsbereich in Open WebUI an (Ordner mit PROJEKT.md und STATUS.md, eigene Chat-Liste). Nur wenn Sven ein neues Thema startet und es noch keinen Arbeitsbereich dafür gibt. Er erscheint nach Neuladen der Seite links in der Seitenleiste.', {
         'type': 'object', 'required': ['name'], 'properties': {
             'name': prop('string', 'Kurzer Name des Themas, 2 bis 40 Zeichen: Buchstaben, Ziffern, Punkt, Unterstrich, Minus (z. B. SelfStore).'),
@@ -284,6 +304,113 @@ print(json.dumps(antwort))
 '''
 
 
+VISION_SCRIPT = r'''
+import base64, json, mimetypes, os, sys, urllib.request
+pfad, frage, url = (base64.b64decode(a).decode() for a in sys.argv[1:4])
+if not os.path.isabs(pfad) or not os.path.isfile(pfad):
+    print(json.dumps({"fehler": "Bild nicht gefunden: " + pfad})); sys.exit(3)
+if os.path.getsize(pfad) > 12000000:
+    print(json.dumps({"fehler": "Bild zu groß (über 12 MB)"})); sys.exit(4)
+art = mimetypes.guess_type(pfad)[0] or "image/png"
+if not art.startswith("image/"):
+    print(json.dumps({"fehler": "Keine Bilddatei: " + pfad})); sys.exit(5)
+daten = base64.b64encode(open(pfad, "rb").read()).decode()
+body = {"messages": [{"role": "user", "content": [
+    {"type": "text", "text": frage},
+    {"type": "image_url", "image_url": {"url": "data:%s;base64,%s" % (art, daten)}}]}],
+    "temperature": 0.2, "max_tokens": 700, "chat_template_kwargs": {"enable_thinking": False}}
+anfrage = urllib.request.Request(url.rstrip("/") + "/v1/chat/completions", json.dumps(body).encode(), {"Content-Type": "application/json"})
+try:
+    with urllib.request.urlopen(anfrage, timeout=240) as antwort:
+        text = json.load(antwort)["choices"][0]["message"]["content"]
+except Exception as fehler:
+    print(json.dumps({"fehler": "Bonsai konnte das Bild nicht ansehen: %s: %s" % (type(fehler).__name__, str(fehler)[:200])})); sys.exit(6)
+print(json.dumps({"pfad": pfad, "antwort": text.strip()}))
+'''
+
+BILD_URL = os.environ.get('BILD_DIENST_URL', 'http://192.168.1.103:8111').rstrip('/')
+BONSAI_URL = os.environ.get('BONSAI_URL', 'http://192.168.1.103:8085').rstrip('/')
+WERKSTATT = os.environ.get('BONSAI_WERKSTATT_BASIS', '/media/Safe-Storage/appdata/werkstatt').rstrip('/')
+BILD_ID = re.compile(r'\d{8}-\d{6}-[0-9a-f]{4}')
+
+
+def bild_http(methode, pfad, daten=None, timeout=30):
+    anfrage = urllib.request.Request(BILD_URL + pfad, data=daten, method=methode, headers={'Content-Type': 'application/json'})
+    try:
+        with urllib.request.urlopen(anfrage, timeout=timeout) as antwort:
+            return json.load(antwort)
+    except urllib.error.HTTPError as fehler:
+        try:
+            return json.load(fehler)
+        except ValueError:
+            return {'fehler': 'Bild-Dienst: HTTP %d' % fehler.code}
+    except OSError as fehler:
+        return {'fehler': 'Bild-Dienst nicht erreichbar (%s). Läuft der Container bild-dienst auf Board 1?' % type(fehler).__name__}
+
+
+def host_pfad(pfad, name):
+    if not isinstance(pfad, str) or not pfad.startswith(WERKSTATT + '/') or '..' in pfad:
+        raise ValueError('%s: absoluter Pfad unter %s erforderlich' % (name, WERKSTATT))
+    return pfad
+
+
+def bild_auftrag(args):
+    prompt = args.get('prompt')
+    if not isinstance(prompt, str) or len(prompt.strip()) < 3:
+        raise ValueError('prompt (Text, mindestens 3 Zeichen) erforderlich')
+    auftrag = {'prompt': prompt.strip(), 'modus': args.get('modus') or 'neu'}
+    for feld in ('breite', 'hoehe', 'anzahl', 'seed'):
+        if args.get(feld) is not None:
+            auftrag[feld] = int(args[feld])
+    if auftrag['modus'] == 'bearbeiten':
+        quelle = host_pfad(args.get('vorlage_pfad'), 'vorlage_pfad')
+        endung = os.path.splitext(quelle)[1].lower()
+        if endung not in ('.png', '.jpg', '.jpeg', '.webp'):
+            raise ValueError('vorlage_pfad: png, jpg oder webp erforderlich')
+        name = 'vorlage-%d%s' % (int(time.time()), endung)
+        hoch = post('/befehl_werkstatt', {'befehl': "curl -sS -f -m 120 -X PUT --data-binary @%s %s/vorlage/%s" % (shlex_quote(quelle), BILD_URL, name), 'timeout': 130}, 140)
+        if hoch.get('exit_code') != 0:
+            return {'fehler': 'Vorlage konnte nicht hochgeladen werden', 'ausgabe': str(hoch.get('ausgabe', ''))[:300]}
+        auftrag['vorlage'] = name
+    return bild_http('POST', '/auftrag', json.dumps(auftrag).encode())
+
+
+def bild_status(args):
+    job_id = args.get('id')
+    if not job_id:
+        return bild_http('GET', '/liste')
+    if not isinstance(job_id, str) or not BILD_ID.fullmatch(job_id):
+        raise ValueError('id: Auftrags-ID wie 20261003-204411-9ee3')
+    return bild_http('GET', '/status/' + job_id)
+
+
+def bild_holen(args):
+    job_id, ordner = args.get('id'), host_pfad(args.get('ziel_ordner'), 'ziel_ordner').rstrip('/')
+    if not isinstance(job_id, str) or not BILD_ID.fullmatch(job_id):
+        raise ValueError('id: Auftrags-ID wie 20261003-204411-9ee3')
+    stand = bild_http('GET', '/status/' + job_id)
+    if stand.get('zustand') != 'fertig':
+        return {'fehler': 'Auftrag ist noch nicht fertig', 'zustand': stand.get('zustand'), 'meldung': stand.get('meldung')}
+    pfade = []
+    for datei in stand.get('dateien', []):
+        ziel = '%s/%s-%s' % (ordner, job_id, datei.replace('ergebnis-', ''))
+        befehl = "mkdir -p %s && curl -sS -f -m 120 -o %s %s/ergebnis/%s/%s && chmod 644 %s" % (
+            shlex_quote(ordner), shlex_quote(ziel), BILD_URL, job_id, datei, shlex_quote(ziel))
+        erg = post('/befehl_werkstatt', {'befehl': befehl, 'timeout': 130}, 140)
+        if erg.get('exit_code') != 0:
+            return {'fehler': 'Download fehlgeschlagen', 'datei': datei, 'ausgabe': str(erg.get('ausgabe', ''))[:300]}
+        pfade.append(ziel)
+    return {'id': job_id, 'bilder': pfade, 'hinweis': 'Sven sieht sie im Datei-Reiter des Arbeitsbereichs. Mit bild_ansehen kannst du sie prüfen.'}
+
+
+def bild_ansehen(args):
+    pfad = host_pfad(args.get('pfad'), 'pfad')
+    frage = args.get('frage') if isinstance(args.get('frage'), str) and args.get('frage').strip() else 'Beschreibe das Bild genau: Motiv, Stil, Farben, Auffälligkeiten und Fehler.'
+    command = "python3 -c %s %s %s %s" % (shlex_quote(VISION_SCRIPT), b64(pfad), b64(frage), b64(BONSAI_URL))
+    return parse_edit(post('/befehl_werkstatt', {'befehl': command, 'timeout': 260}, 280))
+
+
+
 def post(path, data, timeout):
     req = urllib.request.Request(BASE + path, data=json.dumps(data).encode(),
         headers={'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json'})
@@ -457,6 +584,14 @@ def run(name, args):
             shlex_quote(EDIT_SCRIPT), b64(args['pfad']), b64(args['alt']), b64(args['neu']), '1' if args.get('alle') else '0')
         result = post('/befehl_werkstatt', {'befehl': command, 'timeout': 30}, 45)
         return parse_edit(result)
+    if name == 'bild_auftrag':
+        return bild_auftrag(args)
+    if name == 'bild_status':
+        return bild_status(args)
+    if name == 'bild_holen':
+        return bild_holen(args)
+    if name == 'bild_ansehen':
+        return bild_ansehen(args)
     if name == 'aenderung_rueckgaengig':
         if not isinstance(args.get('pfad'), str):
             raise ValueError('pfad (Text) erforderlich')

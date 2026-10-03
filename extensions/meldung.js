@@ -17,6 +17,12 @@
     + 'background:rgba(30,41,59,.92);color:#e2e8f0;font-size:12px;cursor:pointer}.sw-glocke.an{border-color:#4ade80}'
     + '.sw-fortsetzen{position:fixed;left:10px;bottom:84px;z-index:40;padding:5px 10px;border-radius:14px;border:1px solid rgba(148,163,184,.4);'
     + 'background:rgba(30,41,59,.92);color:#e2e8f0;font-size:12px;cursor:pointer}.sw-fortsetzen:hover{border-color:#38bdf8}'
+    + '.sw-bild{position:fixed;right:350px;bottom:20px;z-index:45;width:280px;border-radius:14px;overflow:hidden;background:rgba(15,23,42,.97);'
+    + 'border:1px solid rgba(148,163,184,.4);color:#e2e8f0;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.5);display:none}'
+    + '.sw-bild img{display:block;width:100%;height:auto;background:#000}.sw-bild .k{padding:8px 10px;display:flex;gap:8px;align-items:center;justify-content:space-between}'
+    + '.sw-bild button,.sw-bild a{color:#bae6fd;background:none;border:0;cursor:pointer;font-size:12px;text-decoration:underline;padding:0}'
+    + '.sw-bildlauf{position:fixed;right:350px;bottom:20px;z-index:44;padding:6px 12px;border-radius:12px;background:rgba(30,41,59,.96);'
+    + 'border:1px solid #38bdf8;color:#e2e8f0;font-size:12px;display:none}'
     + '.sw-weiter{position:fixed;z-index:31;display:none;align-items:center;gap:12px;padding:8px 14px;border-radius:12px;background:rgba(127,29,29,.96);'
     + 'border:1px solid #f87171;color:#fee2e2;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.4)}'
     + '.sw-weiter button{border:0;border-radius:8px;padding:6px 14px;background:#f87171;color:#450a0a;font-weight:700;cursor:pointer}';
@@ -139,6 +145,62 @@
       fortsetzenLaeuft = false;
     }
   };
+
+  // ---- Bildaufträge (Bild-Dienst auf Board 1): Fortschrittsanzeige und fertiges Bild mit Vorschau ----
+  const BILD_DIENST = 'http://192.168.1.103:8111';
+  const bildLauf = document.createElement('div');
+  bildLauf.className = 'sw-bildlauf';
+  const bildKarte = document.createElement('div');
+  bildKarte.className = 'sw-bild';
+  const bildBild = document.createElement('img');
+  bildBild.alt = 'Fertiges Bild';
+  const bildLeiste = document.createElement('div');
+  bildLeiste.className = 'k';
+  const bildText = document.createElement('span');
+  const bildLink = document.createElement('a');
+  bildLink.target = '_blank'; bildLink.rel = 'noopener'; bildLink.textContent = 'groß öffnen';
+  const bildZu = document.createElement('button');
+  bildZu.type = 'button'; bildZu.textContent = 'schließen';
+  bildLeiste.append(bildText, bildLink, bildZu);
+  bildKarte.append(bildBild, bildLeiste);
+  document.body.append(bildLauf, bildKarte);
+  let bildTimer = 0;
+  bildZu.onclick = () => { bildKarte.style.display = 'none'; clearTimeout(bildTimer); };
+  function bildZeigen(auftrag) {
+    const datei = (auftrag.dateien || [])[0];
+    if (!datei) return;
+    const adresse = `${BILD_DIENST}/ergebnis/${auftrag.id}/${datei}`;
+    bildBild.src = adresse; bildLink.href = adresse;
+    bildText.textContent = (auftrag.prompt || 'Bild fertig').slice(0, 60);
+    bildKarte.style.display = 'block';
+    clearTimeout(bildTimer);
+    bildTimer = setTimeout(() => { bildKarte.style.display = 'none'; }, 120000);
+  }
+  let bildVorher = new Map();
+  let bildErster = true;
+  const BILD_TEXT = {wartet: 'wartet auf Bonsai', laedt: 'lädt das Bildmodell', rechnet: 'rechnet'};
+  async function bildTakt() {
+    try {
+      const antwort = await fetch(BILD_DIENST + '/liste', {cache: 'no-store'});
+      if (antwort.ok) {
+        const liste = (await antwort.json()).auftraege || [];
+        const jetzt = new Map(liste.map(a => [a.id, a]));
+        const laufend = liste.find(a => BILD_TEXT[a.zustand]);
+        bildLauf.style.display = laufend ? 'block' : 'none';
+        if (laufend) bildLauf.textContent = '🖼 Bild ' + BILD_TEXT[laufend.zustand] + (laufend.zustand === 'wartet' ? ' (Bonsai beendet seinen Zug)' : ' (Bonsai ist entladen)');
+        for (const a of liste) {
+          const alt = bildVorher.get(a.id);
+          const frisch = !bildErster ? alt && alt.zustand !== 'fertig' && a.zustand === 'fertig'
+                                     : a.zustand === 'fertig' && Date.now() / 1000 - (a.geaendert || 0) < 180;
+          if (frisch) { melden('Bild fertig', a.prompt || ''); bildZeigen(a); }
+          if (alt && alt.zustand !== 'fehler' && a.zustand === 'fehler') melden('Bildauftrag fehlgeschlagen', a.meldung || '');
+        }
+        bildVorher = jetzt; bildErster = false;
+      }
+    } catch { bildLauf.style.display = 'none'; }
+    setTimeout(bildTakt, 4000);
+  }
+  bildTakt();
 
   // ---- Hauptschleife ----
   let vorher = new Map();

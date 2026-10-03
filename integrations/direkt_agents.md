@@ -56,6 +56,12 @@ Sven will keine langen Texte schreiben. Darum:
 - **Dateien nie per Shell ändern** (kein `sed -i`, `tee`, `cat > datei`, `echo > datei`) und **keine eigenen .bak-Dateien** anlegen: nur datei_ersetzen und datei_schreiben sichern und prüfen automatisch. Tust du es doch, hängt das Ergebnis den Hinweis `hinweis_aenderung` an.
 - **Sicherung und Prüfung:** Jede Änderung mit datei_ersetzen oder datei_schreiben legt automatisch eine Sicherung an und prüft die Syntax (Feld "syntax"). Steht dort FEHLER, behebe es sofort oder setze mit **aenderung_rueckgaengig** zurück. Vor jedem Commit **projekt_pruefen** aufrufen und das Ergebnis im Bericht nennen.
 
+## Bilder mit Qwen-Image (Pflicht, wenn Sven ein Bild will)
+- Du kannst Bilder ansehen (`bild_ansehen`), aber nicht selbst zeichnen. Bilder macht Qwen-Image 2.1 über den Bild-Dienst: **`bild_auftrag`** (modus "neu" aus Text, oder "bearbeiten" mit `vorlage_pfad`), Prompt **englisch und konkret** (Motiv, Stil, Licht, Ausschnitt, ggf. "no text").
+- **Die Karte reicht nicht für dich UND das Bildmodell.** Der Dienst entlädt dich, sobald du deinen Zug beendest, rechnet 1 bis 2 Minuten und lädt dich wieder. Darum: nach `bild_auftrag` **sofort** mit einem kurzen Satz enden ("Bildauftrag <id> läuft. Sag weiter, wenn die Glocke oder das Bild-Fenster rechts unten das fertige Bild zeigt."). **Nichts mehr aufrufen, nicht warten, nicht abfragen.**
+- Sagt Sven danach "weiter": `bild_status` (ist es fertig?), dann `bild_holen` (Ordner, z. B. `<Arbeitsbereich>/bilder`), dann `bild_ansehen` mit einer konkreten Frage ("Passt es zum Prompt? Was stört?"). Verbessere bei Bedarf den Prompt und lege einen neuen Auftrag an. Höchstens 3 Runden, dann Sven fragen.
+- Zahlen: `breite` und `hoehe` 512 bis 1536 in 16er-Schritten (Standard 1024 x 1024), `anzahl` bis 4 Varianten, `seed` für Wiederholbarkeit.
+
 ## Nachschlagen statt raten (Pflicht)
 - Bei einem Dateiformat, einer API, einem Zahlbereich oder einem Verhalten, das du nicht sicher weißt (z. B. MMDB-Aufbau, ob eine API ab 0 oder 1 zählt, Android- oder Docker-Optionen), **rate nicht**. Nutze `doku_lesen` mit der Seite des Herstellers (nur freigegebene Seiten, siehe Fehlermeldung) und lies die Stelle. Bei langen Seiten mit `ab_zeichen` weiterlesen.
 - Freigegeben sind nur Herstellerseiten. github.com und huggingface.co gibt Sven bei Bedarf selbst frei; frag ihn dann in einem Satz.
