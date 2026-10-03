@@ -54,7 +54,25 @@ class DirectMcpTests(unittest.TestCase):
 
     def test_tools_are_flat_and_do_not_include_the_planner_tool(self):
         names = [t['name'] for t in self.rpc('tools/list')['tools']]
-        self.assertEqual(names, ['befehl_werkstatt', 'befehl_zimaboard', 'ordner_auflisten', 'datei_lesen', 'datei_schreiben', 'datei_ersetzen', 'arbeitsbereich_anlegen'])
+        self.assertEqual(names, ['befehl_werkstatt', 'befehl_zimaboard', 'ordner_auflisten', 'datei_lesen', 'datei_schreiben', 'datei_ersetzen', 'doku_lesen', 'arbeitsbereich_anlegen'])
+
+    def test_doku_lesen_refuses_foreign_domains_and_plain_http(self):
+        error, text = self.tool('doku_lesen', url='https://evil.example.com/x')
+        self.assertTrue(error); self.assertIn('nicht freigegeben', text)
+        error, text = self.tool('doku_lesen', url='https://maxmind.github.io.evil.com/x')   # Endung täuscht nur
+        self.assertTrue(error); self.assertIn('nicht freigegeben', text)
+        error, text = self.tool('doku_lesen', url='http://docs.python.org/3/')
+        self.assertTrue(error); self.assertIn('https', text)
+
+    def test_doku_text_strips_markup_and_scripts(self):
+        import importlib.util
+        key = os.path.join(self.tmp, 'k.key'); Path(key).write_text('x')
+        os.environ['BONSAI_WORKER_KEY_FILE'] = key
+        spec = importlib.util.spec_from_file_location('mcp_doku', os.path.join(os.path.dirname(__file__), '..', 'integrations', 'bonsai_direkt_mcp.py'))
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        text = module.doku_text('<html><head><title>t</title></head><body><script>alert(1)</script><h1>Titel</h1><p>a &amp; b</p><pre>x &lt; y</pre></body></html>')
+        self.assertIn('Titel', text); self.assertIn('a & b', text); self.assertIn('x < y', text)
+        self.assertNotIn('alert', text); self.assertNotIn('<', text.replace('x < y', ''))
 
     def test_replace_changes_exactly_one_place_and_reports_hashes(self):
         path = self.file('eins\nzwei\ndrei\n')

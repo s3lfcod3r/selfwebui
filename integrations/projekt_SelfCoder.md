@@ -14,7 +14,7 @@
   5. **Qualität:** Barrierefreiheit (Kontrast, Alt-Texte, Tastaturbedienung, `prefers-reduced-motion`), SEO (Titel, Beschreibung, Open-Graph, `sitemap`, `robots`), Ladegröße der Bilder (`public/`, `Logo/`), Abhängigkeiten (`npm audit`, nur belegte Befunde).
   6. **Aussehen** folgt dem `brand-kit` (`SELF-RULES.md`): kein eigenes Logo, kein anderes Farbschema.
 - **Nicht möglich für dich:** DNS-Einträge bei Strato ansehen oder ändern (z. B. Reste abgeschalteter Seiten, die auf GitHub Pages zeigen und gekapert werden könnten: das ist Sven oder Claude am PC). Weise in solchen Fällen darauf hin.
-- **Version:** Die Seite hat keine Versionsnummer. Der Stand ist der Commit auf `main`.
+- **Version:** Die Seite hat keine Versionsnummer. Der Stand ist der Commit auf `main`. `gitpush` verlangt sonst eine Versionsänderung: bei dieser Seite mit Svens ausdrücklicher Erlaubnis `docker exec -e GITPUSH_OHNE_VERSION=1 GitHubTool gitpush website` benutzen.
 - **Nie:** Zugangsdaten, private Adressen oder E-Mail-Adressen, die nicht schon öffentlich auf der Seite stehen, in den Code schreiben. Nach Zugangsdaten suchen, bevor etwas veröffentlicht wird.
 
 ## Bekannte offene Punkte
