@@ -28,7 +28,8 @@ PROJEKT_HINWEIS = (
     "Zu Beginn jeder Aufgabe in einem Projekt zuerst die Projektdatei deines Arbeitsbereichs lesen, falls sie existiert: "
     "cat /media/Safe-Storage/appdata/werkstatt/computer/data/workspaces/<Name>/PROJEKT.md. Der Arbeitsbereich <Name> steht in deinem Kontext "
     "(Pfad /data/workspaces/<Name>). Die Datei nennt Klon, Version, Schlüssel-Referenz, bekannte Punkte und Gelerntes. Danach arbeiten.\n")
-COMPACT_TOKENS = 180000  # the model server has 262144 tokens of context
+COMPACT_TOKENS = 70000  # Model server has 262144 tokens of context, but on the RTX 2000E replies slow down and Bonsai gets stuck in thinking
+#                         above ~50-100k tokens (observed 02.-03.10.2026); compacting at 70k keeps chats short. Raise it again if summaries lose too much.
 REQUEST_PARAMS = {'max_tokens': 16384, 'temperature': 0.7, 'top_p': 0.95, 'top_k': 20, 'min_p': 0.05}
 
 
