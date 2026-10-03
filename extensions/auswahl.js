@@ -66,11 +66,42 @@
     }).pop();
   }
 
+  // Reine Ja/Nein-Frage am Ende ("Soll ich ... pushen?"), ohne nummerierte Varianten: Knöpfe Ja und Nein.
+  // Nur bei fertiger Antwort (die Symbole "Antwort kopieren" erscheinen erst danach) und ohne "oder" in der Frage.
+  const JANEIN = /^(soll|darf|m[öo]chtest|willst|kann|kannst|ist|sind|passt|stimmt)\b/i;
+  function frageKnoepfe(letzte) {
+    if (letzte.dataset.swFrage) return;
+    const kopieren = [...document.querySelectorAll('button[aria-label="Antwort kopieren"]')].pop();
+    if (!kopieren || !(letzte.compareDocumentPosition(kopieren) & Node.DOCUMENT_POSITION_FOLLOWING)) return;
+    const ende = letzte.lastElementChild;
+    if (!ende || ende.tagName !== 'P') return;
+    const text = ende.innerText.trim();
+    const satz = text.split(/(?<=[.!:])\s+|\n/).pop().trim();
+    if (!/\?$/.test(satz) || satz.length > 220 || /\boder\b/i.test(satz) || !JANEIN.test(satz)) return;
+    letzte.dataset.swFrage = '1';
+    const box = document.createElement('div');
+    box.className = 'sw-wahl';
+    const hinweis = document.createElement('div');
+    hinweis.className = 'sw-hinweis';
+    hinweis.textContent = 'Klick sendet die Antwort:';
+    box.append(hinweis);
+    [['Ja', COLORS[0], 'ja'], ['Nein', COLORS[4], 'nein']].forEach(([beschriftung, farbe, wort]) => {
+      const knopf = document.createElement('button');
+      knopf.type = 'button';
+      knopf.style.background = farbe;
+      const t = document.createElement('span'); t.className = 't'; t.textContent = beschriftung;
+      knopf.append(t);
+      knopf.onclick = () => { senden(wort); box.remove(); };
+      box.append(knopf);
+    });
+    letzte.append(box);
+  }
+
   function pruefen() {
     const prosen = [...document.querySelectorAll('.prose')];
     const letzte = prosen[prosen.length - 1];
     if (!letzte || letzte.dataset.swWahl) return;
-    if (!TRIGGER.test(letzte.innerText.slice(-250))) return;
+    if (!TRIGGER.test(letzte.innerText.slice(-250))) { frageKnoepfe(letzte); return; }
     const liste = wahlListe(letzte);
     if (!liste) return;
     letzte.dataset.swWahl = '1';
