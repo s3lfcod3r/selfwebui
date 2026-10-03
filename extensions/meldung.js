@@ -15,6 +15,8 @@
   const style = document.createElement('style');
   style.textContent = '.sw-glocke{position:fixed;left:10px;bottom:52px;z-index:40;padding:5px 10px;border-radius:14px;border:1px solid rgba(148,163,184,.4);'
     + 'background:rgba(30,41,59,.92);color:#e2e8f0;font-size:12px;cursor:pointer}.sw-glocke.an{border-color:#4ade80}'
+    + '.sw-fortsetzen{position:fixed;left:10px;bottom:84px;z-index:40;padding:5px 10px;border-radius:14px;border:1px solid rgba(148,163,184,.4);'
+    + 'background:rgba(30,41,59,.92);color:#e2e8f0;font-size:12px;cursor:pointer}.sw-fortsetzen:hover{border-color:#38bdf8}'
     + '.sw-weiter{position:fixed;z-index:31;display:none;align-items:center;gap:12px;padding:8px 14px;border-radius:12px;background:rgba(127,29,29,.96);'
     + 'border:1px solid #f87171;color:#fee2e2;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.4)}'
     + '.sw-weiter button{border:0;border-radius:8px;padding:6px 14px;background:#f87171;color:#450a0a;font-weight:700;cursor:pointer}';
@@ -98,6 +100,45 @@
     leiste.style.bottom = Math.max(8, window.innerHeight - rect.top + 24) + 'px';
     leiste.style.maxWidth = Math.max(260, rect.width) + 'px';
   }
+
+  // ---- Fortsetzen: neuer Chat im selben Arbeitsbereich mit dem Standard-Startsatz ----
+  const warte = ms => new Promise(r => setTimeout(r, ms));
+  const fortsetzenKnopf = document.createElement('button');
+  fortsetzenKnopf.type = 'button';
+  fortsetzenKnopf.className = 'sw-fortsetzen';
+  fortsetzenKnopf.textContent = '↻ Neuer Chat mit Stand';
+  fortsetzenKnopf.title = 'Startet einen frischen Chat in diesem Arbeitsbereich und lässt Bonsai PROJEKT.md und STATUS.md lesen';
+  document.body.append(fortsetzenKnopf);
+  let fortsetzenLaeuft = false;
+  fortsetzenKnopf.onclick = async () => {
+    if (fortsetzenLaeuft) return;
+    const ws = new URLSearchParams(location.search).get('workspace');
+    if (!ws || !window.__swSenden) return;
+    const name = ws.split('/').filter(Boolean).pop();
+    if (!window.confirm(`Neuen Chat in „${name}“ starten und mit dem Stand aus STATUS.md fortsetzen?`)) return;
+    fortsetzenLaeuft = true;
+    try {
+      const vorher = await aktuellerChat();
+      const neuerChatKnopf = () => {
+        const a = [...document.querySelectorAll('.ws-item a')].find(x => (x.getAttribute('href') || '').includes(encodeURIComponent(ws)));
+        const zeile = a && a.closest('div.group');
+        return zeile && zeile.querySelector('[aria-label="Neuer Chat"]');
+      };
+      for (let versuch = 0; versuch < 3; versuch++) {
+        const k = neuerChatKnopf();
+        if (!k) break;
+        k.click();
+        await warte(1500);
+        const jetzt = await aktuellerChat();
+        if (jetzt && jetzt !== vorher) break;
+      }
+      for (let i = 0; i < 20 && !editorFinden(); i++) await warte(250);
+      await warte(600);
+      window.__swSenden(`Projekt ${name}, Fortsetzung. Lies PROJEKT.md und STATUS.md. Fasse in drei Zeilen zusammen, wo wir stehen, und mach mit dem nächsten offenen Punkt weiter. Pushen, Release und Löschen nur auf ausdrücklichen Auftrag.`);
+    } finally {
+      fortsetzenLaeuft = false;
+    }
+  };
 
   // ---- Hauptschleife ----
   let vorher = new Map();

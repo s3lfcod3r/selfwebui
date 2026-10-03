@@ -60,6 +60,13 @@ TOOLS = {
         'type': 'object', 'required': ['url'], 'properties': {
             'url': prop('string', 'https-Adresse der Seite.'),
             'ab_zeichen': prop('integer', 'Ab welchem Zeichen weiterlesen, Standard 0.')}}),
+    'aenderung_rueckgaengig': ('Setzt eine Datei auf die Fassung vor deiner letzten Änderung zurück (jede Änderung mit datei_ersetzen oder datei_schreiben legt automatisch eine Sicherung an). Mit liste=true nur die vorhandenen Sicherungen zeigen. Die aktuelle Fassung wird vorher selbst gesichert, das Zurücksetzen lässt sich also wieder zurücknehmen.', {
+        'type': 'object', 'required': ['pfad'], 'properties': {
+            'pfad': prop('string', 'Absoluter Pfad der Datei.'),
+            'liste': prop('boolean', 'true = nur Sicherungen auflisten, nichts ändern.')}}),
+    'projekt_pruefen': ('Prüft ein Projekt unter repos: Syntax aller Python-, JSON-, TOML-, XML-, Shell- und JS-Dateien (ohne node_modules, build usw.) und führt, falls in der PROJEKT.md der Zeile "Prüfbefehl" ein docker-Befehl steht, auch diesen aus. Vor jedem Commit und Push aufrufen.', {
+        'type': 'object', 'required': ['projekt'], 'properties': {
+            'projekt': prop('string', 'Ordnername unter repos, z. B. selfmediahub.')}}),
     'arbeitsbereich_anlegen': ('Legt für ein NEUES Thema oder Projekt einen eigenen Arbeitsbereich in Open WebUI an (Ordner mit PROJEKT.md und STATUS.md, eigene Chat-Liste). Nur wenn Sven ein neues Thema startet und es noch keinen Arbeitsbereich dafür gibt. Er erscheint nach Neuladen der Seite links in der Seitenleiste.', {
         'type': 'object', 'required': ['name'], 'properties': {
             'name': prop('string', 'Kurzer Name des Themas, 2 bis 40 Zeichen: Buchstaben, Ziffern, Punkt, Unterstrich, Minus (z. B. SelfStore).'),
@@ -97,8 +104,55 @@ print(json.dumps({"arbeitsbereich": name, "pfad": path, "dateien": ["PROJEKT.md"
     "hinweis": "Seite neu laden, dann links in der Seitenleiste öffnen und dort einen neuen Chat starten."}))
 '''
 
-EDIT_SCRIPT = r'''
-import base64, hashlib, json, os, sys
+HILFE = r'''
+import json, os, re, shutil, subprocess, time
+BACKUP = os.environ.get("BONSAI_BACKUP_DIR", "/media/Safe-Storage/appdata/werkstatt/backups")
+
+
+def sichern(path):
+    # Kopie der Datei vor der Änderung (höchstens 20 je Datei, nur bis 5 MB). Gibt den Pfad der Kopie zurück oder None.
+    try:
+        if not os.path.isfile(path) or os.path.getsize(path) > 5000000:
+            return None
+        ordner = os.path.join(BACKUP, re.sub(r"[^A-Za-z0-9._-]+", "_", path.strip("/\\")))
+        os.makedirs(ordner, exist_ok=True)
+        ziel = os.path.join(ordner, time.strftime("%Y%m%d-%H%M%S") + ".bak")
+        n = 1
+        while os.path.exists(ziel):
+            ziel = os.path.join(ordner, time.strftime("%Y%m%d-%H%M%S") + "-%d.bak" % n); n += 1
+        shutil.copy2(path, ziel)
+        for alt in sorted(os.listdir(ordner))[:-20]:
+            os.remove(os.path.join(ordner, alt))
+        return ziel
+    except OSError:
+        return None
+
+
+def pruefe(path):
+    # Syntaxprüfung ohne Nebenwirkungen: "ok", "FEHLER: ..." oder None (Dateityp nicht prüfbar).
+    endung = os.path.splitext(path)[1].lower()
+    try:
+        if endung == ".py":
+            import ast; ast.parse(open(path, encoding="utf-8").read(), path); return "ok"
+        if endung == ".json":
+            json.loads(open(path, encoding="utf-8").read()); return "ok"
+        if endung == ".toml":
+            import tomllib; tomllib.loads(open(path, encoding="utf-8").read()); return "ok"
+        if endung in (".xml", ".svg", ".xsd"):
+            import xml.etree.ElementTree as ET; ET.fromstring(open(path, "rb").read()); return "ok"
+        befehl = {".sh": ["bash", "-n", path], ".bash": ["bash", "-n", path]}.get(endung)
+        if befehl is None and endung in (".js", ".mjs", ".cjs") and shutil.which("node"):
+            befehl = ["node", "--check", path]
+        if befehl:
+            r = subprocess.run(befehl, capture_output=True, text=True, timeout=20)
+            return "ok" if r.returncode == 0 else "FEHLER: " + (r.stderr or r.stdout).strip()[:300]
+    except Exception as fehler:
+        return "FEHLER: %s: %s" % (type(fehler).__name__, str(fehler)[:300])
+    return None
+'''
+
+EDIT_SCRIPT = HILFE + r'''
+import base64, hashlib, sys
 path, alt, neu = (base64.b64decode(a).decode() for a in sys.argv[1:4])
 alle = sys.argv[4] == "1"
 if not os.path.isabs(path) or not os.path.isfile(path):
@@ -110,6 +164,7 @@ if not alt or count == 0:
 if count > 1 and not alle:
     print(json.dumps({"fehler": "alt kommt %d-mal vor" % count, "hinweis": "Mehr Umgebung in alt aufnehmen oder alle=true setzen."})); sys.exit(5)
 new = text.replace(alt, neu) if alle else text.replace(alt, neu, 1)
+sicherung = sichern(path)
 tmp = path + ".tmp-bonsai"
 st = os.stat(path)
 open(tmp, "wb").write(new.encode("utf-8")); os.chmod(tmp, st.st_mode)
@@ -118,13 +173,18 @@ try:
 except (OSError, AttributeError):  # AttributeError: no chown on Windows (tests only)
     pass
 os.replace(tmp, path)
-print(json.dumps({"pfad": path, "ersetzt": count if alle else 1,
+syntax = pruefe(path)
+antwort = {"pfad": path, "ersetzt": count if alle else 1,
     "zeilen_vorher": text.count("\n") + 1, "zeilen_nachher": new.count("\n") + 1,
-    "sha256_vorher": hashlib.sha256(data).hexdigest()[:16], "sha256_nachher": hashlib.sha256(new.encode()).hexdigest()[:16]}))
+    "sha256_vorher": hashlib.sha256(data).hexdigest()[:16], "sha256_nachher": hashlib.sha256(new.encode()).hexdigest()[:16],
+    "sicherung": sicherung, "syntax": syntax}
+if syntax and syntax.startswith("FEHLER"):
+    antwort["warnung"] = "Die Datei hat nach der Änderung einen Syntaxfehler. Sofort beheben oder mit aenderung_rueckgaengig zurücksetzen."
+print(json.dumps(antwort))
 '''
 
-WRITE_SCRIPT = r'''
-import base64, json, os, sys
+WRITE_SCRIPT = HILFE + r'''
+import base64, sys
 path, content = (base64.b64decode(a).decode() for a in sys.argv[1:3])
 append = sys.argv[3] == "1"
 if not os.path.isabs(path):
@@ -134,12 +194,88 @@ while parent and not os.path.isdir(parent):
     missing.append(parent); parent = os.path.dirname(parent)
 os.makedirs(os.path.dirname(path), exist_ok=True)
 existed = os.path.exists(path)
+sicherung = sichern(path)
 with open(path, "a" if append else "w", encoding="utf-8") as f:
     f.write(content)
 if path.startswith("/media/Safe-Storage/appdata/werkstatt/"):  # new entries belong to nobody:users like the rest of the shares
     for created in missing + ([] if existed else [path]):
         os.chown(created, 99, 100)
-print(json.dumps({"pfad": path, "geschrieben_zeichen": len(content), "modus": "a" if append else "w", "neu": not existed}))
+syntax = pruefe(path)
+antwort = {"pfad": path, "geschrieben_zeichen": len(content), "modus": "a" if append else "w", "neu": not existed,
+    "sicherung": sicherung, "syntax": syntax}
+if syntax and syntax.startswith("FEHLER"):
+    antwort["warnung"] = "Die Datei hat nach dem Schreiben einen Syntaxfehler. Sofort beheben oder mit aenderung_rueckgaengig zurücksetzen."
+print(json.dumps(antwort))
+'''
+
+
+UNDO_SCRIPT = HILFE + r'''
+import base64, sys
+path = base64.b64decode(sys.argv[1]).decode(); nur_liste = sys.argv[2] == "1"
+ordner = os.path.join(BACKUP, re.sub(r"[^A-Za-z0-9._-]+", "_", path.strip("/\\")))
+kopien = sorted(os.listdir(ordner)) if os.path.isdir(ordner) else []
+if nur_liste or not kopien:
+    print(json.dumps({"pfad": path, "sicherungen": kopien[-10:]} if kopien else {"fehler": "Keine Sicherung für diese Datei: " + path})); sys.exit(0 if kopien else 3)
+letzte = os.path.join(ordner, kopien[-1])
+vorher = sichern(path) if os.path.isfile(path) else None   # auch das Zurücksetzen lässt sich zurücknehmen
+st = os.stat(path) if os.path.isfile(path) else None
+shutil.copy2(letzte, path)
+if st:
+    try: os.chown(path, st.st_uid, st.st_gid)
+    except (OSError, AttributeError): pass
+print(json.dumps({"pfad": path, "zurueckgesetzt_auf": kopien[-1], "aktuelle_fassung_gesichert": vorher, "syntax": pruefe(path)}))
+'''
+
+PRUEF_SCRIPT = HILFE + r'''
+import base64, re, sys
+name = base64.b64decode(sys.argv[1]).decode()
+if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{1,59}", name):
+    print(json.dumps({"fehler": "Ungültiger Projektname (Ordnername unter repos, z. B. selfmediahub)"})); sys.exit(3)
+WERK = os.environ.get("BONSAI_WERKSTATT", "/media/Safe-Storage/appdata/werkstatt")
+repo = os.path.join(WERK, "repos", name)
+if not os.path.isdir(repo):
+    print(json.dumps({"fehler": "Ordner nicht gefunden: " + repo})); sys.exit(4)
+SKIP = {".git", "node_modules", "out", "build", "dist", ".next", "venv", ".venv", "__pycache__", "vendor", "android"}
+geprueft, fehler = 0, []
+for wurzel, ordner, dateien in os.walk(repo):
+    ordner[:] = [d for d in ordner if d not in SKIP]
+    for datei in dateien:
+        voll = os.path.join(wurzel, datei)
+        if os.path.getsize(voll) > 3000000:
+            continue
+        ergebnis = pruefe(voll)
+        if ergebnis is None:
+            continue
+        geprueft += 1
+        if ergebnis != "ok":
+            fehler.append(os.path.relpath(voll, repo) + " -> " + ergebnis)
+antwort = {"projekt": name, "dateien_geprueft": geprueft, "syntaxfehler": fehler[:20], "syntax": "ok" if not fehler else "FEHLER"}
+# Zusätzlicher Prüfbefehl aus der PROJEKT.md des gleichnamigen Arbeitsbereichs: Zeile "- **Prüfbefehl:** `docker run --rm ... `"
+datei = None
+basis = os.path.join(WERK, "computer", "data", "workspaces")
+if os.path.isdir(basis):
+    for eintrag in os.listdir(basis):
+        if eintrag.lower() == name.lower() and os.path.isfile(os.path.join(basis, eintrag, "PROJEKT.md")):
+            datei = os.path.join(basis, eintrag, "PROJEKT.md")
+befehl = None
+if datei:
+    treffer = re.search(r"Prüfbefehl:\*\*\s*`([^`\n]+)`", open(datei, encoding="utf-8").read())
+    befehl = treffer.group(1).strip() if treffer else None
+antwort["pruefbefehl"] = befehl
+if befehl and not re.match(r"docker (run --rm|exec) ", befehl):
+    antwort["pruefbefehl_hinweis"] = "Aus Sicherheitsgründen nur Befehle, die mit 'docker run --rm' oder 'docker exec' beginnen (Wegwerf-Container). Nicht ausgeführt."
+elif befehl:
+    try:
+        r = subprocess.run(["bash", "-c", befehl], cwd=repo, capture_output=True, text=True, timeout=540)
+        zeilen = (r.stdout + ("\n" + r.stderr if r.stderr.strip() else "")).strip().splitlines()
+        antwort.update(pruefbefehl_exit=r.returncode, pruefbefehl_ausgabe="\n".join(zeilen[-40:])[-4000:])
+    except subprocess.TimeoutExpired:
+        antwort.update(pruefbefehl_exit="Zeitüberschreitung (540 s)")
+elif not datei:
+    antwort["hinweis"] = "Kein Arbeitsbereich gleichen Namens mit PROJEKT.md gefunden; nur die Syntaxprüfung lief."
+else:
+    antwort["hinweis"] = "In der PROJEKT.md steht kein Prüfbefehl; nur die Syntaxprüfung lief."
+print(json.dumps(antwort))
 '''
 
 
@@ -297,6 +433,16 @@ def run(name, args):
             shlex_quote(EDIT_SCRIPT), b64(args['pfad']), b64(args['alt']), b64(args['neu']), '1' if args.get('alle') else '0')
         result = post('/befehl_werkstatt', {'befehl': command, 'timeout': 30}, 45)
         return parse_edit(result)
+    if name == 'aenderung_rueckgaengig':
+        if not isinstance(args.get('pfad'), str):
+            raise ValueError('pfad (Text) erforderlich')
+        command = "python3 -c %s %s %s" % (shlex_quote(UNDO_SCRIPT), b64(args['pfad']), '1' if args.get('liste') else '0')
+        return parse_edit(post('/befehl_werkstatt', {'befehl': command, 'timeout': 30}, 45))
+    if name == 'projekt_pruefen':
+        if not isinstance(args.get('projekt'), str):
+            raise ValueError('projekt (Text) erforderlich')
+        command = "python3 -c %s %s" % (shlex_quote(PRUEF_SCRIPT), b64(args['projekt']))
+        return parse_edit(post('/befehl_werkstatt', {'befehl': command, 'timeout': 600}, 620))
     if name == 'arbeitsbereich_anlegen':
         if not isinstance(args.get('name'), str):
             raise ValueError('name (Text) erforderlich')

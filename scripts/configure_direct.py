@@ -22,6 +22,8 @@ BRAIN = DATA / 'brain'
 WORKSPACES = {'RTX2000': None, 'SelfWG': 'projekt_SelfWG.md', 'SelfDashboard': 'projekt_SelfDashboard.md', 'SelfStorm': 'projekt_SelfStorm.md', 'SelfStream': 'projekt_SelfStream.md', 'SelfStreamDesktop': 'projekt_SelfStreamDesktop.md',
               'SelfStore': 'projekt_SelfStore.md', 'SelfMailer': 'projekt_SelfMailer.md', 'SelfRemote': 'projekt_SelfRemote.md', 'SelfAuthenticator': 'projekt_SelfAuthenticator.md', 'SelfArchiver': 'projekt_SelfArchiver.md', 'SelfFon': 'projekt_SelfFon.md', 'SelfMediaHub': 'projekt_SelfMediaHub.md', 'SelfPoolTracker': 'projekt_SelfPoolTracker.md', 'SelfScreen': 'projekt_SelfScreen.md', 'SelfThreatMap': 'projekt_SelfThreatMap.md', 'SelfGuard': 'projekt_SelfGuard.md', 'SelfCoder': 'projekt_SelfCoder.md'}
 MODELS = ['bonsai-2-27b', 'RTX2000/bonsai-2-27b']
+BUILTIN_ALLE = ('files', 'terminal', 'web', 'browser', 'memory', 'chats', 'skills', 'tasks', 'automations', 'images', 'subagents', 'notifications')
+BUILTIN_AN = ('tasks', 'chats', 'memory', 'notifications', 'automations', 'subagents', 'browser')
 # Tool-heavy work: lower temperature than the 1.0 of the model card; other values from the card.
 PROJEKT_HINWEIS = (
     "\n\nPROJEKTREGELN\n"
@@ -141,7 +143,10 @@ def main():
         params = models.setdefault(model, {'is_active': True}).setdefault('params', {})
         models[model]['is_active'] = True
         params['system_prompt'] = prompt
-        params['builtin_tools'] = {group: False for group in (params.get('builtin_tools') or {})}
+        # Nur diese eingebauten Gruppen sind an (Aufgabenliste, frühere Chats, Memory, Meldungen, Zeitpläne, Hilfsagent, Browser).
+        # Alles andere bleibt aus: Dateien und Terminal erledigen die einfachen heim_*-Werkzeuge, und Web (read_url) würde
+        # die Freigabeliste von doku_lesen umgehen.
+        params['builtin_tools'] = {group: group in BUILTIN_AN for group in BUILTIN_ALLE}
         params['request_params'] = dict(REQUEST_PARAMS)
         # cptr summarizes at 80k tokens by default; after that the Qwen template fails ('No user query found').
         params['compact_token_threshold'] = COMPACT_TOKENS

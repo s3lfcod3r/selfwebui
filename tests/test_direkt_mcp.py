@@ -27,6 +27,7 @@ class Worker(BaseHTTPRequestHandler):
 class DirectMcpTests(unittest.TestCase):
     def setUp(self):
         Worker.calls = []
+        os.environ['BONSAI_BACKUP_DIR'] = tempfile.mkdtemp()
         self.server = HTTPServer(('127.0.0.1', 0), Worker)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.tmp = tempfile.mkdtemp()
@@ -54,7 +55,7 @@ class DirectMcpTests(unittest.TestCase):
 
     def test_tools_are_flat_and_do_not_include_the_planner_tool(self):
         names = [t['name'] for t in self.rpc('tools/list')['tools']]
-        self.assertEqual(names, ['befehl_werkstatt', 'befehl_zimaboard', 'ordner_auflisten', 'datei_lesen', 'datei_schreiben', 'datei_ersetzen', 'doku_lesen', 'arbeitsbereich_anlegen'])
+        self.assertEqual(names, ['befehl_werkstatt', 'befehl_zimaboard', 'ordner_auflisten', 'datei_lesen', 'datei_schreiben', 'datei_ersetzen', 'doku_lesen', 'aenderung_rueckgaengig', 'projekt_pruefen', 'arbeitsbereich_anlegen'])
 
     def test_doku_lesen_refuses_foreign_domains_and_plain_http(self):
         error, text = self.tool('doku_lesen', url='https://evil.example.com/x')
@@ -73,6 +74,38 @@ class DirectMcpTests(unittest.TestCase):
         text = module.doku_text('<html><head><title>t</title></head><body><script>alert(1)</script><h1>Titel</h1><p>a &amp; b</p><pre>x &lt; y</pre></body></html>')
         self.assertIn('Titel', text); self.assertIn('a & b', text); self.assertIn('x < y', text)
         self.assertNotIn('alert', text); self.assertNotIn('<', text.replace('x < y', ''))
+
+    def test_edit_makes_backup_checks_syntax_and_can_be_undone(self):
+        path = os.path.join(self.tmp, 'a.py'); Path(path).write_text('x = 1\n', encoding='utf-8')
+        error, text = self.tool('datei_ersetzen', pfad=path, alt='x = 1', neu='x = (')   # absichtlich kaputt
+        antwort = json.loads(text)
+        self.assertTrue(antwort['sicherung']); self.assertTrue(antwort['syntax'].startswith('FEHLER')); self.assertIn('warnung', antwort)
+        error, text = self.tool('aenderung_rueckgaengig', pfad=path)
+        self.assertFalse(error); self.assertEqual(json.loads(text)['syntax'], 'ok')
+        self.assertEqual(Path(path).read_text(encoding='utf-8'), 'x = 1\n')
+        error, text = self.tool('aenderung_rueckgaengig', pfad=path, liste=True)
+        self.assertGreaterEqual(len(json.loads(text)['sicherungen']), 2)   # Original und die kaputte Fassung
+
+    def test_write_checks_json_and_undo_without_backup_is_an_error(self):
+        path = os.path.join(self.tmp, 'b.json')
+        error, text = self.tool('datei_schreiben', pfad=path, inhalt='{"a": }')
+        self.assertTrue(json.loads(text)['syntax'].startswith('FEHLER'))
+        error, text = self.tool('aenderung_rueckgaengig', pfad=os.path.join(self.tmp, 'nie-geaendert.txt'))
+        self.assertTrue(error); self.assertIn('Keine Sicherung', text)
+
+    def test_project_check_finds_syntax_errors_and_skips_foreign_commands(self):
+        werk = os.path.join(self.tmp, 'werk'); os.makedirs(os.path.join(werk, 'repos', 'demo')); os.makedirs(os.path.join(werk, 'computer', 'data', 'workspaces', 'Demo'))
+        Path(werk, 'repos', 'demo', 'ok.py').write_text('a = 1\n'); Path(werk, 'repos', 'demo', 'kaputt.py').write_text('def (:\n')
+        Path(werk, 'computer', 'data', 'workspaces', 'Demo', 'PROJEKT.md').write_text('- **Prüfbefehl:** `rm -rf /tmp/x`\n', encoding='utf-8')
+        os.environ['BONSAI_WERKSTATT'] = werk
+        try:
+            error, text = self.tool('projekt_pruefen', projekt='demo')
+        finally:
+            del os.environ['BONSAI_WERKSTATT']
+        antwort = json.loads(text)
+        self.assertEqual(antwort['syntax'], 'FEHLER'); self.assertEqual(antwort['dateien_geprueft'], 2)
+        self.assertIn('kaputt.py', antwort['syntaxfehler'][0]); self.assertIn('pruefbefehl_hinweis', antwort)
+        self.assertNotIn('pruefbefehl_exit', antwort)
 
     def test_replace_changes_exactly_one_place_and_reports_hashes(self):
         path = self.file('eins\nzwei\ndrei\n')
