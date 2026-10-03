@@ -16,6 +16,15 @@ class TelemetryTests(unittest.TestCase):
 
 import fehlerchats
 
+class LaufendeChatsTests(unittest.TestCase):
+    def test_shape_and_title_fallback(self):
+        out=fehlerchats.laufende_chats([('c1','Projekt A'),('c2',None),('c3','x'*200)])
+        self.assertEqual(out[0],{'id':'c1','titel':'Projekt A'})
+        self.assertEqual(out[1]['titel'],'Chat')
+        self.assertEqual(len(out[2]['titel']),80)
+        self.assertEqual(fehlerchats.laufende_chats([]),[])
+
+
 class LeereAntwortTests(unittest.TestCase):
     def test_only_completed_reasoning_without_text_counts(self):
         denken='[{"type":"reasoning","status":"completed","content":[]}]'

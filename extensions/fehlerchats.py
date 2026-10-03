@@ -19,6 +19,7 @@ CACHE_S = 4
 IGNORIEREN = ('cancel', 'abort', 'stopp', 'user request')
 LEERE_ANTWORT = 'Bonsai ist beim Denken stehen geblieben und hat keine Antwort gegeben. Schreib "weiter".'
 _cache = {'zeit': 0.0, 'daten': {}}
+_aktiv_cache = {'zeit': 0.0, 'daten': []}
 
 
 def fehler_text(meta):
@@ -77,6 +78,45 @@ async def lese_fehler(jetzt_ms=None):
         if text:
             chats[chat.id] = {'fehler': text[:200], 'zeit': max(msg.created_at or 0, chat.updated_at or 0)}
     return chats
+
+
+def laufende_chats(zeilen):
+    """[(chat_id, titel)] für Chats, deren letzte Antwort noch läuft (nicht fertig). Reine Funktion für den Test."""
+    return [{'id': chat_id, 'titel': (titel or 'Chat')[:80]} for chat_id, titel in zeilen]
+
+
+async def lese_laufende():
+    from sqlalchemy import select
+    from cptr.models.chats import Chat, ChatMessage, is_internal_chat
+    from cptr.utils.db import get_db
+    jetzt_ms = int(time.time() * 1000)
+    async with await get_db() as db:
+        rows = (await db.execute(select(ChatMessage).where(
+            ChatMessage.role == 'assistant', ChatMessage.done == False,  # noqa: E712
+            ChatMessage.created_at > jetzt_ms - 6 * 3600 * 1000))).scalars().all()
+    zeilen, gesehen = [], set()
+    for msg in rows:
+        if msg.chat_id in gesehen:
+            continue
+        chat = await Chat.get_by_id(msg.chat_id)
+        if not chat or is_internal_chat(chat.meta) or chat.current_message_id != msg.id:
+            continue
+        gesehen.add(msg.chat_id)
+        zeilen.append((chat.id, chat.title))
+    return laufende_chats(zeilen)
+
+
+@router.get('/aktiv')
+async def aktiv(request: Request):
+    require_admin(request)
+    jetzt = time.monotonic()
+    if jetzt - _aktiv_cache['zeit'] > 2:
+        try:
+            _aktiv_cache.update(zeit=jetzt, daten=await lese_laufende())
+        except Exception:
+            log.exception('Laufende Chats nicht lesbar')
+            _aktiv_cache.update(zeit=jetzt, daten=[])
+    return JSONResponse({'laufend': _aktiv_cache['daten']}, headers={'Cache-Control': 'no-store'})
 
 
 @router.get('/fehler/status')

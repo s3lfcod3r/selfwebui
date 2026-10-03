@@ -177,6 +177,12 @@
       : failure ? `Endete mit Fehler ${ago(failure.zeit || chat.updated_at)}: ${failure.fehler}
 Schreibe „weiter“ in den Chat.`
       : `Fertig · zuletzt ${ago(chat.updated_at)}`));
+    if (failure) {
+      const weiter = el('button', 'chip', 'Weiter senden');
+      weiter.type = 'button';
+      weiter.onclick = () => { try { localStorage.setItem('sw-weiter', chat.id + '|' + Date.now()); } catch {} location.href = link.href; };
+      item.append(weiter);
+    }
     return item;
   }
   function renderChips(jobs, ws, filter) {

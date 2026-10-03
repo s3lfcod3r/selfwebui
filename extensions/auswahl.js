@@ -40,6 +40,8 @@
     }, 300);
   }
 
+  window.__swSenden = senden;   // wird auch vom Weiter-Knopf (meldung.js) benutzt
+
   function kurz(text) {
     const clean = text.replace(/\s+/g, ' ').replace(/^\(?Empfehlung\)?\s*/i, '').trim();
     return clean.length > 150 ? clean.slice(0, 147) + '…' : clean;

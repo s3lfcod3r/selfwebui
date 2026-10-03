@@ -118,5 +118,5 @@ async def status(request: Request):
 async def script():
     # Spalte und Auswahl-Knöpfe (auswahl.js) laufen als ein Skript
     base = Path('/opt/selfwebui/extensions')
-    text = chr(10).join((base / name).read_text(encoding='utf-8') for name in ('worker_panel.js', 'auswahl.js', 'chatstatus.js'))
+    text = chr(10).join((base / name).read_text(encoding='utf-8') for name in ('worker_panel.js', 'auswahl.js', 'chatstatus.js', 'meldung.js'))
     return Response(text, media_type='application/javascript', headers={'Cache-Control':'no-store'})
