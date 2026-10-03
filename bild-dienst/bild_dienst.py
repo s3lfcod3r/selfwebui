@@ -16,6 +16,7 @@ import fcntl
 import json
 import os
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -34,8 +35,10 @@ LOCK_DATEI = os.environ.get("PRODUKTIONS_LOCK", "/deritler-runtime/production.lo
 MAX_VRAM_MIB = int(os.environ.get("MAX_VRAM_MIB", "5000"))     # darüber ist die Karte für Qwen zu belegt (Stimme, HandBrake)
 BONSAI_RUHE_S = int(os.environ.get("BONSAI_RUHE_S", "20"))
 JOB_FRIST_S = int(os.environ.get("JOB_FRIST_S", "1500"))
+AUFBEWAHREN_TAGE = int(os.environ.get("AUFBEWAHREN_TAGE", "30"))
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,80}")
 ID = re.compile(r"\d{8}-\d{6}-[0-9a-f]{4}")
+LAUFENDE_ZUSTAENDE = ("wartet", "laedt", "rechnet")
 BILD_TROCKEN = os.environ.get("BILD_TROCKEN") == "1"   # nur für Tests: Warteschlange und HTTP ohne Docker und ohne Karte
 
 (DATEN / "jobs").mkdir(parents=True, exist_ok=True)
@@ -196,6 +199,26 @@ def auftrag_abarbeiten(job_id):
         (DATEN / "bonsai-war-an").unlink(missing_ok=True)
 
 
+def aufraeumen(jetzt=None):
+    """Löscht Aufträge und hochgeladene Vorlagen, die älter als AUFBEWAHREN_TAGE sind. Laufende Aufträge bleiben immer."""
+    jetzt = jetzt or time.time()
+    grenze = jetzt - AUFBEWAHREN_TAGE * 86400
+    geloescht = 0
+    for ordner in list((DATEN / "jobs").iterdir()):
+        s = status_lesen(ordner.name) or {}
+        if s.get("zustand") in LAUFENDE_ZUSTAENDE:
+            continue
+        stand = s.get("geaendert") or ordner.stat().st_mtime
+        if stand < grenze:
+            shutil.rmtree(ordner, ignore_errors=True)
+            geloescht += 1
+    for datei in list((DATEN / "vorlagen").iterdir()):
+        if datei.is_file() and datei.stat().st_mtime < grenze:
+            datei.unlink(missing_ok=True)
+            geloescht += 1
+    return geloescht
+
+
 def laeufer():
     # Nach einem Neustart des Dienstes: halbfertige Aufträge als Fehler markieren und Bonsai wieder anschalten
     for ordner in sorted((DATEN / "jobs").iterdir()):
@@ -204,7 +227,14 @@ def laeufer():
             status_setzen(ordner.name, "fehler", "Dienst wurde währenddessen neu gestartet")
             if (DATEN / "bonsai-war-an").exists() and not bonsai_laeuft():
                 bonsai_starten()
+    naechste_pflege = 0.0
     while True:
+        if time.time() >= naechste_pflege:
+            try:
+                aufraeumen()
+            except OSError:
+                pass
+            naechste_pflege = time.time() + 3600
         wartend = [o.name for o in sorted((DATEN / "jobs").iterdir()) if (status_lesen(o.name) or {}).get("zustand") == "wartet"]
         if wartend:
             auftrag_abarbeiten(wartend[0])
