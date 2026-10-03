@@ -68,3 +68,4 @@ Kleine Modelle löschen gelegentlich ungewollt Code oder erfinden Befunde. Darum
 4. Der Bau muss grün sein, sonst kein Push.
 5. Befunde aus Prüfungen nur umsetzen, wenn du sie am Code belegen kannst (Datei:Zeile, was genau dort steht). Erfundene Regeln oder API-Namen sind ein Fehler: im Zweifel den Befund verwerfen und das melden.
 Im Bericht am Ende: Liste der entfernten Zeilen mit Begründung.
+- **Zweite Prüfung (Pflicht):** Vor dem Push `docker exec GitHubTool gegenpruefung <ordner>` ausführen (mit `timeout` 300, dauert 1 bis 3 Minuten). Dabei liest Bonsai den Diff in einem frischen Kontext und meldet Befunde mit Datei:Zeile. Gib den Bericht an Sven weiter. HOCH- und MITTEL-Befunde behebst du vor dem Push (neu committen, Prüfung wiederholen) oder begründest sie. `gitpush` lehnt ohne diese Prüfung für den aktuellen Stand ab ("SPERRE"). Danach reicht ein Hinweis in zwei Sätzen an Sven: was geprüft wurde, was gefunden wurde.
