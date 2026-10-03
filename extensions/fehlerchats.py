@@ -17,7 +17,7 @@ router = APIRouter(prefix='/api/selfwebui')
 FENSTER_MS = 24 * 3600 * 1000      # Fehler der letzten 24 Stunden
 CACHE_S = 4
 IGNORIEREN = ('cancel', 'abort', 'stopp', 'user request')
-LEERE_ANTWORT = 'Bonsai hat nur gedacht und keine Antwort gegeben. Schreib "weiter".'
+LEERE_ANTWORT = 'Bonsai ist beim Denken stehen geblieben und hat keine Antwort gegeben. Schreib "weiter".'
 _cache = {'zeit': 0.0, 'daten': {}}
 
 
@@ -28,16 +28,17 @@ def fehler_text(meta):
 
 
 def leere_antwort(content, output):
-    """Antwort ohne Text und ohne Werkzeug, die nur aus abgeschlossenem Denken besteht (Bonsai hat sich festgedacht)."""
+    """Antwort ohne Text, die beim Denken endet (Bonsai hat sich festgedacht oder wurde mitten im Gedanken beendet)."""
     if str(content or '').strip():
         return False
     try:
         items = json.loads(output) if isinstance(output, str) else output
     except ValueError:
         return False
-    if not isinstance(items, list) or not items:
+    if not isinstance(items, list) or not items or not all(isinstance(i, dict) for i in items):
         return False
-    return all(isinstance(i, dict) and i.get('type') == 'reasoning' and i.get('status') == 'completed' for i in items)
+    letztes = items[-1]
+    return letztes.get('type') == 'reasoning' and letztes.get('status') == 'completed'
 
 
 def ignorierbar(text):

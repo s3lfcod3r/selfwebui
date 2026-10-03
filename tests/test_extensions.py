@@ -23,7 +23,8 @@ class LeereAntwortTests(unittest.TestCase):
         self.assertTrue(fehlerchats.leere_antwort('  ',[{'type':'reasoning','status':'completed'}]))
         self.assertFalse(fehlerchats.leere_antwort('Hallo',denken))                                 # hat geantwortet
         self.assertFalse(fehlerchats.leere_antwort('','[{"type":"reasoning","status":"in_progress"}]'))  # abgebrochen
-        self.assertFalse(fehlerchats.leere_antwort('','[{"type":"reasoning","status":"completed"},{"type":"function_call"}]'))
+        self.assertFalse(fehlerchats.leere_antwort('','[{"type":"reasoning","status":"completed"},{"type":"function_call"}]'))   # endet mit Werkzeug
+        self.assertTrue(fehlerchats.leere_antwort('','[{"type":"function_call"},{"type":"function_call_output"},{"type":"reasoning","status":"completed"}]'))  # endet beim Denken
         self.assertFalse(fehlerchats.leere_antwort('',''))
         self.assertFalse(fehlerchats.leere_antwort('','kaputt'))
         self.assertFalse(fehlerchats.leere_antwort('','[]'))
