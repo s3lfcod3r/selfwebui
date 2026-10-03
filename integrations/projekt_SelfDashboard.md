@@ -16,7 +16,8 @@
 - Auf GitHub (`a09af13`): Befund 1 (PluginStoreModal, `useMemo` an `activePlugins`) und Befund 2 (`postcss-legacy-compat.js`: in der Arbeitskopie gibt es die Datei nicht) sind erledigt, `STATUS.md` liegt dort.
 - Die Arbeitskopie weicht von GitHub ab: es fehlen dort `.github/workflows/notify-selfstore.yml`, `docs/plugins/dreame|muell`, `postcss-legacy-compat.js`; dafür gibt es `android/` und `public/privacy.html`. Deshalb nur einzelne Dateien übertragen.
 
-## Bekannte offene Punkte (belegt, Prüfung vom 30.09.2026)
+## Bekannte offene Punkte
+- `plugins-pack/jellyfin/icon.svg` ist abgeschnitten (Prüfung `projekt_pruefen`, Stand 03.10.2026): die Datei endet mitten im `<path>` (`…32 21.5z"/`), es fehlen das schließende `>` und `</svg>`; XML-Parser: "unclosed token, line 10". Die anderen vier `plugins-pack/*/icon.svg` sind in Ordnung. Datei vervollständigen (Pfad mit `"/>` schließen, `</svg>` ergänzen), mit `projekt_pruefen` belegen, dass der Syntaxfehler weg ist. Version/Push nur auf Svens Auftrag. (belegt, Prüfung vom 30.09.2026)
 - `PluginStoreModal.tsx:261`: `activeDashboard()?.plugins ?? []` erzeugt pro Render ein neues Array, das in den Deps von `handleAddPlugin` und `catalogRows` steht (nur Performance).
 - `postcss-legacy-compat.js:1`: überflüssige `eslint-disable`-Zeile.
 - `npm audit`: 21 Meldungen, aber ohne Laufzeit-Pfad (keine Server-Actions, axios nur im Build-Skript).
