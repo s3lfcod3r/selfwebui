@@ -180,6 +180,7 @@ Schreibe „weiter“ in den Chat.`
     if (failure) {
       const weiter = el('button', 'chip', 'Weiter senden');
       weiter.type = 'button';
+      weiter.style.cssText = 'white-space:nowrap;margin-top:8px;flex:none;width:auto';
       weiter.onclick = () => { try { localStorage.setItem('sw-weiter', chat.id + '|' + Date.now()); } catch {} location.href = link.href; };
       item.append(weiter);
     }

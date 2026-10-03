@@ -34,7 +34,7 @@
     const rect = editor.getBoundingClientRect();
     box.style.display = 'flex';
     box.style.left = Math.max(8, rect.left) + 'px';
-    box.style.bottom = Math.max(8, window.innerHeight - rect.top + 56) + 'px';
+    box.style.bottom = Math.max(8, window.innerHeight - rect.top + 24) + 'px';
     box.style.maxWidth = Math.max(240, rect.width) + 'px';
   }
   async function poll() {

@@ -95,7 +95,7 @@
     leisteText.textContent = fehler;
     leiste.style.display = 'flex';
     leiste.style.left = Math.max(8, rect.left) + 'px';
-    leiste.style.bottom = Math.max(8, window.innerHeight - rect.top + 56) + 'px';
+    leiste.style.bottom = Math.max(8, window.innerHeight - rect.top + 24) + 'px';
     leiste.style.maxWidth = Math.max(260, rect.width) + 'px';
   }
 
