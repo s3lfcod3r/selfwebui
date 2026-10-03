@@ -34,8 +34,10 @@ QWEN_IMAGE = os.environ.get("QWEN_IMAGE", "deritler-qwen-image21:local")
 LOCK_DATEI = os.environ.get("PRODUKTIONS_LOCK", "/deritler-runtime/production.lock")
 MAX_VRAM_MIB = int(os.environ.get("MAX_VRAM_MIB", "5000"))     # darüber ist die Karte für Qwen zu belegt (Stimme, HandBrake)
 BONSAI_RUHE_S = int(os.environ.get("BONSAI_RUHE_S", "20"))
-JOB_FRIST_S = int(os.environ.get("JOB_FRIST_S", "1500"))
+JOB_FRIST_S = int(os.environ.get("JOB_FRIST_S", "2400"))
 AUFBEWAHREN_TAGE = int(os.environ.get("AUFBEWAHREN_TAGE", "30"))
+MAX_SEITE = int(os.environ.get("MAX_SEITE", "2048"))               # längste erlaubte Bildseite (neu)
+MAX_AUFLOESUNG = int(os.environ.get("MAX_AUFLOESUNG", "2048"))   # Kantenmaß beim Bearbeiten: Ergebnis hat etwa Aufloesung x Aufloesung Pixel
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,80}")
 ID = re.compile(r"\d{8}-\d{6}-[0-9a-f]{4}")
 LAUFENDE_ZUSTAENDE = ("wartet", "laedt", "rechnet")
@@ -303,8 +305,11 @@ class Anfrage(BaseHTTPRequestHandler):
                 raise ValueError("modus neu|bearbeiten und prompt (3 bis 2000 Zeichen) erforderlich")
             anzahl = max(1, min(int(a.get("anzahl", 1)), 4))
             breite, hoehe = int(a.get("breite", 1024)), int(a.get("hoehe", 1024))
-            if not (512 <= breite <= 1536 and 512 <= hoehe <= 1536 and breite % 16 == 0 and hoehe % 16 == 0):
-                raise ValueError("breite und hoehe: 512 bis 1536 in 16er-Schritten")
+            if not (512 <= breite <= MAX_SEITE and 512 <= hoehe <= MAX_SEITE and breite % 16 == 0 and hoehe % 16 == 0):
+                raise ValueError("breite und hoehe: 512 bis %d in 16er-Schritten" % MAX_SEITE)
+            aufloesung = int(a.get("aufloesung", 1024))
+            if not 512 <= aufloesung <= MAX_AUFLOESUNG:
+                raise ValueError("aufloesung: 512 bis %d" % MAX_AUFLOESUNG)
             vorlage = a.get("vorlage")
             if modus == "bearbeiten":
                 if not isinstance(vorlage, str) or not NAME.fullmatch(vorlage) or not (DATEN / "vorlagen" / vorlage).is_file():
@@ -312,7 +317,7 @@ class Anfrage(BaseHTTPRequestHandler):
             job_id = time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:4]
             ordner = DATEN / "jobs" / job_id
             ordner.mkdir(parents=True)
-            auftrag = {"modus": modus, "prompt": prompt, "anzahl": anzahl, "breite": breite, "hoehe": hoehe,
+            auftrag = {"modus": modus, "prompt": prompt, "anzahl": anzahl, "breite": breite, "hoehe": hoehe, "aufloesung": aufloesung,
                        "seed": int(a["seed"]) if a.get("seed") is not None else int(time.time()) % 100000000}
             if modus == "bearbeiten":
                 endung = Path(vorlage).suffix.lower() or ".png"

@@ -227,6 +227,38 @@ class DirectMcpTests(unittest.TestCase):
         finally:
             ende()
 
+    def test_image_edit_can_use_the_photo_svens_attached_to_the_chat(self):
+        import sqlite3
+        daten = os.path.join(self.tmp, 'cptrdaten'); os.makedirs(os.path.join(daten, 'uploads'))
+        db = sqlite3.connect(os.path.join(daten, 'app.db'))
+        db.execute("create table chat_messages (id text, chat_id text, role text, meta text, created_at integer)")
+        db.execute("insert into chat_messages values ('1','c','user',?,100)", (json.dumps({'files': [{'id': 'aaaa1111-0000', 'type': 'image', 'content_type': 'image/jpeg', 'name': 'alt.jpg'}]}),))
+        db.execute("insert into chat_messages values ('2','c','user',?,200)", (json.dumps({'files': [{'id': 'bbbb2222-0000', 'type': 'image', 'content_type': 'image/png', 'name': 'neu.png'}]}),))
+        db.execute("insert into chat_messages values ('3','c','user',?,300)", (json.dumps({'files': [{'id': 'cccc3333-0000', 'content_type': 'application/pdf', 'name': 'x.pdf'}]}),))
+        db.commit(); db.close()
+        Path(daten, 'uploads', 'aaaa1111-0000').write_bytes(b'ALT'); Path(daten, 'uploads', 'bbbb2222-0000').write_bytes(b'NEU')
+        BildStub.gesehen = []
+        stub = HTTPServer(('127.0.0.1', 0), BildStub); threading.Thread(target=stub.serve_forever, daemon=True).start()
+        proc = subprocess.Popen([sys.executable, str(INTEGRATIONS / 'bonsai_direkt_mcp.py')], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding='utf-8',
+            env={**os.environ, 'PYTHONIOENCODING': 'utf-8', 'BONSAI_WORKER_KEY_FILE': self.key, 'BONSAI_WORKER_URL': 'http://127.0.0.1:%d' % self.server.server_port,
+                 'BILD_DIENST_URL': 'http://127.0.0.1:%d' % stub.server_port, 'CPTR_DATA_DIR': daten})
+        def tool(**a):
+            proc.stdin.write(json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'bild_auftrag', 'arguments': a}}) + '\n'); proc.stdin.flush()
+            r = json.loads(proc.stdout.readline())['result']; return r['isError'], r['content'][0]['text']
+        try:
+            error, text = tool(prompt='Professional photo of this rabbit', modus='bearbeiten')
+            self.assertFalse(error, text)
+            put = [e for e in BildStub.gesehen if e[0] == 'PUT'][0]
+            self.assertTrue(put[1].startswith('/vorlage/anhang-') and put[1].endswith('.png')); self.assertEqual(put[2], b'NEU')   # neuestes Bild, das PDF zählt nicht
+            BildStub.gesehen = []
+            error, text = tool(prompt='Professional photo of this rabbit', modus='bearbeiten', anhang=2)
+            put = [e for e in BildStub.gesehen if e[0] == 'PUT'][0]
+            self.assertTrue(put[1].endswith('.jpg')); self.assertEqual(put[2], b'ALT')
+            error, text = tool(prompt='Professional photo of this rabbit', modus='bearbeiten', anhang=5)
+            self.assertIn('Kein Bild im Chat', text)
+        finally:
+            proc.kill(); proc.wait(); proc.stdin.close(); proc.stdout.close(); stub.shutdown(); stub.server_close()
+
     def test_image_fetch_refuses_unfinished_jobs_and_downloads_finished_ones(self):
         tool, ende = self.mit_bildstub()
         try:

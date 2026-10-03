@@ -73,8 +73,10 @@ TOOLS = {
             'prompt': prop('string', 'Bildbeschreibung (3 bis 2000 Zeichen).'),
             'modus': prop('string', '"neu" (Standard) oder "bearbeiten" (Referenzbild umbauen, Größe folgt dem Bild).'),
             'vorlage_pfad': prop('string', 'Nur bei bearbeiten: absoluter Pfad des Referenzbilds auf der Werkstatt (png/jpg bis 25 MB).'),
-            'breite': prop('integer', 'Nur bei neu: 512 bis 1536 in 16er-Schritten, Standard 1024.'),
-            'hoehe': prop('integer', 'Nur bei neu: 512 bis 1536 in 16er-Schritten, Standard 1024.'),
+            'anhang': prop('integer', 'Nur bei bearbeiten, statt vorlage_pfad: ein Bild, das Sven in den Chat gehängt hat. 1 = zuletzt hochgeladen (Standard), 2 = das davor usw.'),
+            'breite': prop('integer', 'Nur bei neu: 512 bis 2048 in 16er-Schritten, Standard 1024.'),
+            'hoehe': prop('integer', 'Nur bei neu: 512 bis 2048 in 16er-Schritten, Standard 1024.'),
+            'aufloesung': prop('integer', 'Nur bei bearbeiten: Kantenmaß, das Ergebnis hat etwa aufloesung x aufloesung Pixel bei der Form der Vorlage (Standard 1024, höchstens 2048).'),
             'anzahl': prop('integer', 'Varianten, 1 bis 4 (Standard 1).'),
             'seed': prop('integer', 'Zufallszahl; gleicher Seed und Prompt ergeben dasselbe Bild.')}}),
     'bild_status': ('Zeigt den Stand eines Bildauftrags (wartet, laedt, rechnet, fertig, fehler) und die Dateinamen. Ohne id: die letzten Aufträge.', {
@@ -354,14 +356,57 @@ def host_pfad(pfad, name):
     return pfad
 
 
+def neuester_anhang(nr):
+    """(Datei-ID, Content-Type) des nr-ten zuletzt von Sven in den Chat gehängten Bilds (1 = neuestes) oder None."""
+    import sqlite3
+    basis = os.environ.get('CPTR_DATA_DIR', '/data')
+    try:
+        db = sqlite3.connect(os.path.join(basis, 'app.db'), timeout=10)
+        zeilen = db.execute("select meta from chat_messages where role='user' and meta like '%files%' order by created_at desc limit 60").fetchall()
+    except sqlite3.Error:
+        return None
+    bilder = []
+    for (meta,) in zeilen:
+        try:
+            dateien = (json.loads(meta) or {}).get('files') or []
+        except (ValueError, TypeError):
+            continue
+        for datei in dateien:
+            art = str(datei.get('content_type') or '')
+            if isinstance(datei, dict) and datei.get('id') and (datei.get('type') == 'image' or art.startswith('image/')):
+                bilder.append((str(datei['id']), art or 'image/png'))
+    return bilder[nr - 1] if 1 <= nr <= len(bilder) else None
+
+
+ANHANG_ENDUNG = {'image/png': '.png', 'image/jpeg': '.jpg', 'image/jpg': '.jpg', 'image/webp': '.webp'}
+
+
 def bild_auftrag(args):
     prompt = args.get('prompt')
     if not isinstance(prompt, str) or len(prompt.strip()) < 3:
         raise ValueError('prompt (Text, mindestens 3 Zeichen) erforderlich')
     auftrag = {'prompt': prompt.strip(), 'modus': args.get('modus') or 'neu'}
-    for feld in ('breite', 'hoehe', 'anzahl', 'seed'):
+    for feld in ('breite', 'hoehe', 'anzahl', 'seed', 'aufloesung'):
         if args.get(feld) is not None:
             auftrag[feld] = int(args[feld])
+    if auftrag['modus'] == 'bearbeiten' and not args.get('vorlage_pfad'):
+        nr = int(args.get('anhang') or 1)
+        treffer = neuester_anhang(nr)
+        if not treffer:
+            return {'fehler': 'Kein Bild im Chat gefunden (Anhang %d). Sven soll das Foto in den Chat ziehen oder du gibst vorlage_pfad an.' % nr}
+        datei_id, art = treffer
+        endung = ANHANG_ENDUNG.get(art.lower())
+        pfad = os.path.join(os.environ.get('CPTR_DATA_DIR', '/data'), 'uploads', datei_id)
+        if not endung or not re.fullmatch(r'[0-9a-fA-F-]{8,64}', datei_id) or not os.path.isfile(pfad):
+            return {'fehler': 'Der Anhang ist kein png/jpg/webp oder die Datei fehlt (%s)' % art}
+        if os.path.getsize(pfad) > 25 * 1024 * 1024:
+            return {'fehler': 'Das Bild ist größer als 25 MB'}
+        name = 'anhang-%d%s' % (int(time.time()), endung)
+        antwort = bild_http('PUT', '/vorlage/' + name, open(pfad, 'rb').read(), timeout=120)
+        if 'fehler' in antwort:
+            return antwort
+        auftrag['vorlage'] = name
+        return bild_http('POST', '/auftrag', json.dumps(auftrag).encode())
     if auftrag['modus'] == 'bearbeiten':
         quelle = host_pfad(args.get('vorlage_pfad'), 'vorlage_pfad')
         endung = os.path.splitext(quelle)[1].lower()
