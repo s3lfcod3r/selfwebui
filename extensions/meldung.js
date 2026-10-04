@@ -21,6 +21,7 @@
     + 'border:1px solid rgba(148,163,184,.4);color:#e2e8f0;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.5);display:none}'
     + '.sw-bild img{display:block;width:100%;height:auto;background:#000}.sw-bild .k{padding:8px 10px;display:flex;gap:8px;align-items:center;justify-content:space-between}'
     + '.sw-bild button,.sw-bild a{color:#bae6fd;background:none;border:0;cursor:pointer;font-size:12px;text-decoration:underline;padding:0}'
+    + '.sw-bild .m{display:none;gap:6px;padding:6px 10px 0}.sw-bild .m button{border:1px solid rgba(148,163,184,.5);border-radius:6px;min-width:26px;padding:2px 6px;text-decoration:none}.sw-bild .m button.a{background:#0ea5e9;color:#082f49;border-color:#0ea5e9}'
     + '.sw-bildlauf{position:fixed;right:350px;bottom:20px;z-index:44;padding:6px 12px;border-radius:12px;background:rgba(30,41,59,.96);'
     + 'border:1px solid #38bdf8;color:#e2e8f0;font-size:12px;display:none}'
     + '.sw-weiter{position:fixed;z-index:31;display:none;align-items:center;gap:12px;padding:8px 14px;border-radius:12px;background:rgba(127,29,29,.96);'
@@ -186,6 +187,8 @@
   bildKarte.className = 'sw-bild';
   const bildBild = document.createElement('img');
   bildBild.alt = 'Fertiges Bild';
+  const bildMini = document.createElement('div');
+  bildMini.className = 'm';
   const bildLeiste = document.createElement('div');
   bildLeiste.className = 'k';
   const bildText = document.createElement('span');
@@ -194,20 +197,48 @@
   const bildZu = document.createElement('button');
   bildZu.type = 'button'; bildZu.textContent = 'schließen';
   bildLeiste.append(bildText, bildLink, bildZu);
-  bildKarte.append(bildBild, bildLeiste);
+  bildKarte.append(bildBild, bildMini, bildLeiste);
   document.body.append(bildLauf, bildKarte);
-  let bildTimer = 0;
-  bildZu.onclick = () => { bildKarte.style.display = 'none'; clearTimeout(bildTimer); };
-  function bildZeigen(auftrag) {
-    const datei = (auftrag.dateien || [])[0];
-    if (!datei) return;
-    const adresse = `${BILD_DIENST}/ergebnis/${auftrag.id}/${datei}`;
+
+  // Fertige Bilder bleiben sichtbar, bis Sven "schließen" klickt (auch nach Neuladen oder Tab-Wechsel).
+  // Gemerkt wird, welche Aufträge er schon gesehen hat. Beim allerersten Start gelten Aufträge älter als 2 Stunden als gesehen.
+  const GESEHEN_KEY = 'sw-bilder-gesehen';
+  const gesehen = new Set();
+  let gesehenNeu = true;
+  try { const roh = JSON.parse(localStorage.getItem(GESEHEN_KEY) || 'null'); if (Array.isArray(roh)) { roh.forEach(i => gesehen.add(i)); gesehenNeu = false; } } catch {}
+  function gesehenSpeichern() { try { localStorage.setItem(GESEHEN_KEY, JSON.stringify([...gesehen].slice(-300))); } catch {} }
+  let ungesehen = [];
+  let angezeigt = '';
+  function bildAdresse(auftrag, datei) { return `${BILD_DIENST}/ergebnis/${auftrag.id}/${datei}`; }
+  function bildWaehlen(auftrag, datei) {
+    const adresse = bildAdresse(auftrag, datei);
     bildBild.src = adresse; bildLink.href = adresse;
-    bildText.textContent = (auftrag.prompt || 'Bild fertig').slice(0, 60);
-    bildKarte.style.display = 'block';
-    clearTimeout(bildTimer);
-    bildTimer = setTimeout(() => { bildKarte.style.display = 'none'; }, 120000);
+    [...bildMini.children].forEach(b => b.classList.toggle('a', b.dataset.datei === datei));
   }
+  function bildZeigen() {
+    const auftrag = ungesehen[0];
+    if (!auftrag) { bildKarte.style.display = 'none'; angezeigt = ''; return; }
+    const dateien = auftrag.dateien || [];
+    if (angezeigt !== auftrag.id) {              // nur neu aufbauen, wenn ein anderer Auftrag dran ist (sonst springt die Auswahl alle 4 s zurück)
+      angezeigt = auftrag.id;
+      bildMini.textContent = '';
+      dateien.forEach((datei, i) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.dataset.datei = datei; b.textContent = String(i + 1);
+        b.onclick = () => bildWaehlen(auftrag, datei);
+        bildMini.append(b);
+      });
+      bildMini.style.display = dateien.length > 1 ? 'flex' : 'none';
+      if (dateien[0]) bildWaehlen(auftrag, dateien[0]);
+    }
+    const mehr = ungesehen.length - 1;
+    bildText.textContent = (auftrag.prompt || 'Bild fertig').slice(0, 50) + (mehr > 0 ? `  (+${mehr} weitere)` : '');
+    bildKarte.style.display = 'block';
+  }
+  bildZu.onclick = () => {
+    if (ungesehen[0]) { gesehen.add(ungesehen[0].id); gesehenSpeichern(); ungesehen = ungesehen.slice(1); }
+    angezeigt = ''; bildZeigen();
+  };
   let bildVorher = new Map();
   let bildErster = true;
   const BILD_TEXT = {wartet: 'wartet auf Bonsai', laedt: 'lädt das Bildmodell', rechnet: 'rechnet'};
@@ -220,13 +251,20 @@
         const laufend = liste.find(a => BILD_TEXT[a.zustand]);
         bildLauf.style.display = laufend ? 'block' : 'none';
         if (laufend) bildLauf.textContent = '🖼 Bild ' + BILD_TEXT[laufend.zustand] + (laufend.zustand === 'wartet' ? ' (Bonsai beendet seinen Zug)' : ' (Bonsai ist entladen)');
+        const jetztS = Date.now() / 1000;
+        if (gesehenNeu) {
+          liste.filter(a => a.zustand === 'fertig' && jetztS - (a.geaendert || 0) > 7200).forEach(a => gesehen.add(a.id));
+          gesehenNeu = false; gesehenSpeichern();
+        }
         for (const a of liste) {
           const alt = bildVorher.get(a.id);
-          const frisch = !bildErster ? alt && alt.zustand !== 'fertig' && a.zustand === 'fertig'
-                                     : a.zustand === 'fertig' && Date.now() / 1000 - (a.geaendert || 0) < 180;
-          if (frisch) { melden('Bild fertig', a.prompt || ''); bildZeigen(a); }
+          if (!bildErster && alt && alt.zustand !== 'fertig' && a.zustand === 'fertig') melden('Bild fertig', a.prompt || '');
           if (alt && alt.zustand !== 'fehler' && a.zustand === 'fehler') melden('Bildauftrag fehlgeschlagen', a.meldung || '');
         }
+        // ältester zuerst unten, neuestes Bild liegt oben auf (die Liste kommt neueste zuerst)
+        ungesehen = liste.filter(a => a.zustand === 'fertig' && (a.dateien || []).length && !gesehen.has(a.id) && jetztS - (a.geaendert || 0) < 7 * 86400);
+        if (bildErster && ungesehen.length) melden('Bild fertig', ungesehen[0].prompt || '');
+        bildZeigen();
         bildVorher = jetzt; bildErster = false;
       }
     } catch { bildLauf.style.display = 'none'; }
