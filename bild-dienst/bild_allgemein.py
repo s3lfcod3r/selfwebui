@@ -19,6 +19,20 @@ from qwen_batch import COMFY_IN, turbo_erzeugen  # noqa: E402
 JOB = Path("/job")
 
 
+def vorschau(anzahl):
+    """Kleine JPEG-Vorschau je Bild (480 px lange Seite) für das Archiv; Fehler hier dürfen den Auftrag nicht scheitern lassen."""
+    try:
+        from PIL import Image
+        for i in range(anzahl):
+            quelle = JOB / f"ergebnis-{i}.png"
+            if quelle.is_file():
+                bild = Image.open(quelle).convert("RGB")
+                bild.thumbnail((480, 480))
+                bild.save(JOB / f"thumb-{i}.jpg", quality=82)
+    except Exception as fehler:   # noqa: BLE001
+        print("Vorschau nicht erstellt:", fehler, flush=True)
+
+
 def main():
     auftrag = json.loads((JOB / "auftrag.json").read_text(encoding="utf-8"))
     modus = auftrag.get("modus", "neu")
@@ -46,6 +60,7 @@ def main():
     finally:
         for pfad in referenzen:
             pfad.unlink(missing_ok=True)
+    vorschau(anzahl)
     print(f"qwen21-turbo {modus} bilder={anzahl} seed={seed} sekunden={time.time() - t0:.1f}", flush=True)
 
 

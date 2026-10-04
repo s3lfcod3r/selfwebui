@@ -10,7 +10,16 @@ HTTP (nur LAN, kein Login, wie die anderen Dienste auf dem Board):
   PUT  /vorlage/<name>      Referenzbild hochladen (bis 25 MB), name = [A-Za-z0-9._-]+
   GET  /status/<id>         Zustand: wartet | laedt | rechnet | fertig | fehler
   GET  /liste               die letzten 20 Aufträge
-  GET  /ergebnis/<id>/<datei>.png
+  GET  /ergebnis/<id>/<datei>.png      (auch thumb-<n>.jpg)
+  Archiv für die Oberfläche "Bonsai & Qwen Image Generator" (Port 8112):
+  GET  /archiv              alle Aufträge mit Einstellungen (?q=&favorit=1&modus=&limit=)
+  GET  /vorlage-bild/<id>   das Ausgangsfoto eines Bearbeiten-Auftrags
+  GET  /bonsai              {bereit, beschaeftigt} (für die Anzeige in der Oberfläche)
+  GET|POST /einstellungen   {aufbewahren_tage}: 0 = nie löschen; Favoriten bleiben immer
+  POST /aufraeumen          sofort aufräumen
+  POST /auftrag/<id>/favorit {an}   DELETE /auftrag/<id>   POST /auftrag/<id>/abbrechen (nur wartende)
+  POST /vorlage-aus-ergebnis {id, datei} -> Vorlage zum erneuten Bearbeiten
+  POST /prompt              {text, modus, hinweise} -> englischer Prompt von Bonsai (nur wenn Bonsai geladen ist)
 """
 import fcntl
 import json
@@ -20,6 +29,7 @@ import shutil
 import subprocess
 import threading
 import time
+import urllib.parse
 import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -43,12 +53,94 @@ ID = re.compile(r"\d{8}-\d{6}-[0-9a-f]{4}")
 LAUFENDE_ZUSTAENDE = ("wartet", "laedt", "rechnet")
 BILD_TROCKEN = os.environ.get("BILD_TROCKEN") == "1"   # nur für Tests: Warteschlange und HTTP ohne Docker und ohne Karte
 
+EINSTELLUNGEN_DATEI = DATEN / "einstellungen.json"
 (DATEN / "jobs").mkdir(parents=True, exist_ok=True)
 (DATEN / "vorlagen").mkdir(parents=True, exist_ok=True)
 _lock = threading.Lock()
 
 
 # ---------------------------------------------------------------- Hilfen
+def einstellungen():
+    """{aufbewahren_tage}: 0 = nie löschen. Standard kommt aus AUFBEWAHREN_TAGE."""
+    tage = AUFBEWAHREN_TAGE
+    try:
+        tage = int(json.loads(EINSTELLUNGEN_DATEI.read_text(encoding="utf-8")).get("aufbewahren_tage", tage))
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    return {"aufbewahren_tage": tage if tage == 0 or 1 <= tage <= 3650 else AUFBEWAHREN_TAGE}
+
+
+def einstellungen_setzen(daten):
+    tage = int(daten.get("aufbewahren_tage"))
+    if tage != 0 and not 1 <= tage <= 3650:
+        raise ValueError("aufbewahren_tage: 0 (nie löschen) oder 1 bis 3650")
+    EINSTELLUNGEN_DATEI.write_text(json.dumps({"aufbewahren_tage": tage}), encoding="utf-8")
+    return einstellungen()
+
+
+def ordner_groesse(ordner):
+    return sum(p.stat().st_size for p in ordner.rglob("*") if p.is_file())
+
+
+def auftrag_lesen(job_id):
+    try:
+        return json.loads((DATEN / "jobs" / job_id / "auftrag.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def archiv_eintrag(job_id):
+    s = status_lesen(job_id)
+    if not s:
+        return None
+    a = auftrag_lesen(job_id)
+    ordner = DATEN / "jobs" / job_id
+    nummern = [d[len("ergebnis-"):-len(".png")] for d in (s.get("dateien") or [])]
+    return {"id": job_id, "zustand": s.get("zustand"), "meldung": s.get("meldung"), "dateien": s.get("dateien") or [],
+            "prompt": a.get("prompt") or s.get("prompt"), "modus": a.get("modus") or s.get("modus"),
+            "seed": a.get("seed"), "breite": a.get("breite"), "hoehe": a.get("hoehe"), "aufloesung": a.get("aufloesung"),
+            "anzahl": a.get("anzahl"), "angelegt": s.get("angelegt"), "gestartet": s.get("gestartet"), "fertig": s.get("fertig"),
+            "geaendert": s.get("geaendert"), "favorit": bool(s.get("favorit")),
+            "thumbs": [f"thumb-{n}.jpg" for n in nummern if (ordner / f"thumb-{n}.jpg").is_file()],
+            "vorlage": any(ordner.glob("vorlage.*"))}
+
+
+def archiv_liste(q="", nur_favoriten=False, modus="", limit=300):
+    eintraege = []
+    for ordner in sorted((DATEN / "jobs").iterdir(), reverse=True):
+        e = archiv_eintrag(ordner.name)
+        if not e:
+            continue
+        if (nur_favoriten and not e["favorit"]) or (modus and e["modus"] != modus):
+            continue
+        if q and q.lower() not in (e["prompt"] or "").lower():
+            continue
+        eintraege.append(e)
+        if len(eintraege) >= limit:
+            break
+    return eintraege
+
+
+def prompt_verbessern(text, modus="neu", hinweise=""):
+    """Lässt Bonsai aus einer deutschen Beschreibung einen englischen Qwen-Prompt schreiben (ohne Nachdenken, nur wenn Bonsai geladen ist)."""
+    regel = ("You write prompts for the image model Qwen-Image 2.1. Reply with ONE English prompt only: no quotes, no explanation, no list. "
+             "Be concrete about subject, setting, style, lighting and composition. Keep every detail the user names. "
+             "Never invent readable text; add 'no readable text' unless the user asks for text. At most 110 words.")
+    if modus == "bearbeiten":
+        regel += (" The user edits a reference photo. Start with 'Edit the reference photo.' and say which people and objects stay exactly as in the photo "
+                  "(same face, hair, clothes, pose, position) and what changes. Say exactly what must not be duplicated or changed.")
+    nutzer = text.strip() + (("\nStyle wishes: " + hinweise.strip()) if hinweise.strip() else "")
+    daten = json.dumps({"messages": [{"role": "system", "content": regel}, {"role": "user", "content": nutzer}], "max_tokens": 500,
+                        "temperature": 0.6, "chat_template_kwargs": {"enable_thinking": False}}).encode()
+    anfrage = urllib.request.Request(BONSAI_URL + "/v1/chat/completions", data=daten, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(anfrage, timeout=180) as antwort:
+        inhalt = json.load(antwort)["choices"][0]["message"]["content"]
+    inhalt = re.sub(r"<think>.*?</think>", "", inhalt, flags=re.S).strip().strip('"').strip()
+    if len(inhalt) < 3:
+        raise ValueError("Bonsai hat keinen Prompt geliefert")
+    return inhalt[:2000]
+
+
 def docker(*args, timeout=60):
     return subprocess.run(["docker", *args], capture_output=True, text=True, timeout=timeout)
 
@@ -142,6 +234,8 @@ def auftrag_abarbeiten(job_id):
                         kandidat.close()
                 if sperre is not None:
                     break
+            if (status_lesen(job_id) or {}).get("zustand") not in LAUFENDE_ZUSTAENDE:
+                return   # abgebrochen oder gelöscht
             status_setzen(job_id, "wartet", "wartet, bis Bonsai seinen Zug beendet hat und die Karte frei ist")
             time.sleep(5)
 
@@ -202,13 +296,17 @@ def auftrag_abarbeiten(job_id):
 
 
 def aufraeumen(jetzt=None):
-    """Löscht Aufträge und hochgeladene Vorlagen, die älter als AUFBEWAHREN_TAGE sind. Laufende Aufträge bleiben immer."""
+    """Löscht Aufträge und hochgeladene Vorlagen, die älter als die eingestellte Aufbewahrungszeit sind (0 = nie).
+    Laufende Aufträge und Favoriten bleiben immer."""
     jetzt = jetzt or time.time()
-    grenze = jetzt - AUFBEWAHREN_TAGE * 86400
+    tage = einstellungen()["aufbewahren_tage"]
+    if tage == 0:
+        return 0
+    grenze = jetzt - tage * 86400
     geloescht = 0
     for ordner in list((DATEN / "jobs").iterdir()):
         s = status_lesen(ordner.name) or {}
-        if s.get("zustand") in LAUFENDE_ZUSTAENDE:
+        if s.get("zustand") in LAUFENDE_ZUSTAENDE or s.get("favorit"):
             continue
         stand = s.get("geaendert") or ordner.stat().st_mtime
         if stand < grenze:
@@ -261,7 +359,7 @@ class Anfrage(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(204)
-        for kopf, wert in (("Access-Control-Allow-Origin", "*"), ("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS"),
+        for kopf, wert in (("Access-Control-Allow-Origin", "*"), ("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"),
                            ("Access-Control-Allow-Headers", "Content-Type")):
             self.send_header(kopf, wert)
         self.end_headers()
@@ -275,15 +373,40 @@ class Anfrage(BaseHTTPRequestHandler):
                 if s:
                     eintraege.append({"id": ordner.name, **{k: s.get(k) for k in ("zustand", "meldung", "dateien", "prompt", "modus", "geaendert")}})
             return self.senden(200, {"auftraege": eintraege})
+        if pfad == "/archiv":
+            abfrage = urllib.parse.parse_qs(self.path.partition("?")[2])
+            erster = lambda name: (abfrage.get(name) or [""])[0]   # noqa: E731
+            try:
+                grenze = max(1, min(int(erster("limit") or 300), 1000))
+            except ValueError:
+                grenze = 300
+            return self.senden(200, {"auftraege": archiv_liste(erster("q"), erster("favorit") == "1", erster("modus"), grenze)})
+        if pfad == "/bonsai":
+            try:
+                with urllib.request.urlopen(BONSAI_URL + "/health", timeout=3) as antwort:
+                    bereit = antwort.status == 200
+            except OSError:
+                bereit = False
+            return self.senden(200, {"bereit": bereit, "beschaeftigt": bereit and bonsai_beschaeftigt()})
+        if pfad == "/einstellungen":
+            return self.senden(200, {**einstellungen(), "auftraege": sum(1 for _ in (DATEN / "jobs").iterdir()),
+                                     "bytes": ordner_groesse(DATEN / "jobs") + ordner_groesse(DATEN / "vorlagen"),
+                                     "frei": shutil.disk_usage(DATEN).free})
+        treffer = re.fullmatch(r"/vorlage-bild/(" + ID.pattern + ")", pfad)
+        if treffer:
+            datei = next(iter(sorted((DATEN / "jobs" / treffer.group(1)).glob("vorlage.*"))), None)
+            if datei:
+                typ = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}.get(datei.suffix.lower(), "image/png")
+                return self.senden(200, datei.read_bytes(), typ)
         treffer = re.fullmatch(r"/status/(" + ID.pattern + ")", pfad)
         if treffer:
             s = status_lesen(treffer.group(1))
             return self.senden(200 if s else 404, s or {"fehler": "unbekannte Auftrags-ID"})
-        treffer = re.fullmatch(r"/ergebnis/(" + ID.pattern + r")/(ergebnis-\d\.png)", pfad)
+        treffer = re.fullmatch(r"/ergebnis/(" + ID.pattern + r")/(ergebnis-\d\.png|thumb-\d\.jpg)", pfad)
         if treffer:
             datei = DATEN / "jobs" / treffer.group(1) / treffer.group(2)
             if datei.is_file():
-                return self.senden(200, datei.read_bytes(), "image/png")
+                return self.senden(200, datei.read_bytes(), "image/jpeg" if datei.suffix == ".jpg" else "image/png")
         self.senden(404, {"fehler": "nicht gefunden"})
 
     def do_PUT(self):
@@ -294,9 +417,75 @@ class Anfrage(BaseHTTPRequestHandler):
         (DATEN / "vorlagen" / treffer.group(1)).write_bytes(self.rfile.read(laenge))
         self.senden(200, {"vorlage": treffer.group(1), "bytes": laenge})
 
-    def do_POST(self):
-        if self.path.split("?")[0] != "/auftrag":
+    def json_koerper(self):
+        laenge = int(self.headers.get("Content-Length") or 0)
+        return json.loads(self.rfile.read(laenge)) if laenge else {}
+
+    def do_DELETE(self):
+        treffer = re.fullmatch(r"/auftrag/(" + ID.pattern + ")", self.path.split("?")[0])
+        if not treffer:
             return self.senden(404, {"fehler": "nicht gefunden"})
+        job_id = treffer.group(1)
+        s = status_lesen(job_id)
+        if not s:
+            return self.senden(404, {"fehler": "unbekannte Auftrags-ID"})
+        if s.get("zustand") in LAUFENDE_ZUSTAENDE:
+            return self.senden(409, {"fehler": "Der Auftrag läuft noch. Erst abbrechen (nur wartende) oder warten."})
+        shutil.rmtree(DATEN / "jobs" / job_id, ignore_errors=True)
+        self.senden(200, {"geloescht": job_id})
+
+    def archiv_post(self, pfad):
+        """Archiv-Aktionen der Oberfläche. Gibt True zurück, wenn der Pfad behandelt wurde."""
+        treffer = re.fullmatch(r"/auftrag/(" + ID.pattern + ")/(favorit|abbrechen)", pfad)
+        if treffer:
+            job_id, aktion = treffer.groups()
+            s = status_lesen(job_id)
+            if not s:
+                self.senden(404, {"fehler": "unbekannte Auftrags-ID"})
+            elif aktion == "favorit":
+                neu = status_setzen(job_id, s.get("zustand"), s.get("meldung", ""), favorit=bool(self.json_koerper().get("an", True)))
+                self.senden(200, {"favorit": bool(neu.get("favorit"))})
+            elif s.get("zustand") != "wartet":
+                self.senden(409, {"fehler": "Nur wartende Aufträge lassen sich abbrechen (ein laufender muss fertig werden)."})
+            else:
+                status_setzen(job_id, "fehler", "abgebrochen")
+                self.senden(200, {"abgebrochen": job_id})
+            return True
+        if pfad == "/aufraeumen":
+            self.senden(200, {"geloescht": aufraeumen()})
+            return True
+        if pfad == "/einstellungen":
+            self.senden(200, einstellungen_setzen(self.json_koerper()))
+            return True
+        if pfad == "/vorlage-aus-ergebnis":
+            a = self.json_koerper()
+            job_id, datei = str(a.get("id", "")), str(a.get("datei", ""))
+            if not ID.fullmatch(job_id) or not re.fullmatch(r"ergebnis-\d\.png", datei) or not (DATEN / "jobs" / job_id / datei).is_file():
+                raise ValueError("id und datei (ergebnis-<n>.png) eines vorhandenen Bildes erforderlich")
+            name = f"archiv-{job_id}-{datei[len('ergebnis-'):]}"
+            shutil.copyfile(DATEN / "jobs" / job_id / datei, DATEN / "vorlagen" / name)
+            self.senden(200, {"vorlage": name})
+            return True
+        if pfad == "/prompt":
+            a = self.json_koerper()
+            if not 3 <= len(str(a.get("text", "")).strip()) <= 1500:
+                raise ValueError("text (3 bis 1500 Zeichen) erforderlich")
+            try:
+                self.senden(200, {"prompt": prompt_verbessern(str(a["text"]), str(a.get("modus", "neu")), str(a.get("hinweise", "")))})
+            except OSError:
+                self.senden(503, {"fehler": "Bonsai ist gerade nicht geladen (ein Bild rechnet oder die Karte ist belegt). Der Text wird unverändert benutzt."})
+            return True
+        return False
+
+    def do_POST(self):
+        pfad = self.path.split("?")[0]
+        try:
+            if pfad != "/auftrag":
+                if not self.archiv_post(pfad):
+                    self.senden(404, {"fehler": "nicht gefunden"})
+                return
+        except (ValueError, KeyError, TypeError) as fehler:
+            return self.senden(400, {"fehler": str(fehler)})
         try:
             a = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)))
             modus = a.get("modus", "neu")

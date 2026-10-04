@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonsai &amp; Qwen Image Generator</title>
+<link rel="icon" href="shield.png">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components.css">
+<link rel="stylesheet" href="studio.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <img class="brand-logo" src="shield.png" alt="">
+    <div class="wordmark"><span class="self">Bonsai</span><span class="rest">&nbsp;&amp;&nbsp;Qwen</span></div>
+    <nav class="nav" id="nav">
+      <a href="#neu" data-tab="neu">Neues Bild</a>
+      <a href="#aendern" data-tab="aendern">Bild ändern</a>
+      <a href="#archiv" data-tab="archiv">Archiv</a>
+      <a href="#einstellungen" data-tab="einstellungen">Einstellungen</a>
+    </nav>
+    <div class="spacer"></div>
+    <span class="pill" id="bonsaiPill" title="Bonsai antwortet nur, wenn gerade kein Bild gerechnet wird">Bonsai ?</span>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="warteschlange" class="queue hidden" aria-live="polite"></section>
+
+  <!-- ===== Neues Bild ===== -->
+  <section id="tab-neu" class="tab">
+    <div class="split">
+      <div class="panel-card">
+        <h2 class="card-h">Was soll gezeichnet werden?</h2>
+        <div class="label">Bildart</div>
+        <div class="choice" id="n-art"></div>
+        <div class="label">Beschreibung</div>
+        <textarea class="field" id="n-text" rows="4" placeholder="z. B. Ein roter Leuchtturm auf einer Klippe bei Sonnenuntergang, Wellen schlagen an die Felsen"></textarea>
+        <div id="n-logo" class="hidden">
+          <div class="label">Logo: Name oder Text im Bild (leer = ohne Text)</div>
+          <input class="field" id="n-logotext" placeholder="z. B. SelfStream">
+          <div class="hint">Schrift im Bild malt Qwen oft mit Fehlern. Am sichersten ist ein Logo ohne Text, den Text setzt du danach selbst.</div>
+          <div class="label">Farben</div>
+          <input class="field" id="n-farben" placeholder="z. B. Teal und Eisblau auf dunklem Grund">
+        </div>
+        <div class="label">Stil</div>
+        <div class="choice" id="n-stil"></div>
+        <div class="label">Licht und Stimmung</div>
+        <div class="choice" id="n-licht"></div>
+        <div class="label">Ausschnitt und Perspektive</div>
+        <div class="choice" id="n-ausschnitt"></div>
+      </div>
+      <div class="panel-card">
+        <h2 class="card-h">Format und Größe</h2>
+        <div class="label">Format</div>
+        <div class="choice" id="n-format"></div>
+        <div class="label">Größe</div>
+        <div class="choice" id="n-groesse"></div>
+        <div class="label">Varianten</div>
+        <div class="choice" id="n-anzahl"></div>
+        <div class="label">Seed (leer = zufällig)</div>
+        <input class="field" id="n-seed" inputmode="numeric" placeholder="zufällig">
+        <div class="sum mono" id="n-summe"></div>
+      </div>
+    </div>
+    <div class="panel-card">
+      <h2 class="card-h">Prompt für Qwen <span class="hint">englisch, du kannst ihn ändern</span></h2>
+      <textarea class="field" id="n-prompt" rows="4" placeholder="Leer lassen: der Prompt wird aus deinen Angaben gebaut. Oder lass Bonsai ihn schreiben."></textarea>
+      <div class="row">
+        <button class="btn" id="n-bonsai">Mit Bonsai schreiben</button>
+        <button class="btn btn-primary" id="n-los">Bild erzeugen</button>
+        <span class="hint" id="n-hinweis"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Bild ändern ===== -->
+  <section id="tab-aendern" class="tab hidden">
+    <div class="split">
+      <div class="panel-card">
+        <h2 class="card-h">Welches Foto?</h2>
+        <div class="drop" id="a-drop">
+          <img id="a-vorschau" class="hidden" alt="Vorlage">
+          <div id="a-leer">Foto hierher ziehen oder <label class="link">auswählen<input type="file" id="a-datei" accept="image/png,image/jpeg,image/webp" hidden></label>
+            <div class="hint">png, jpg oder webp, bis 25 MB</div></div>
+        </div>
+        <div class="row"><button class="btn btn-small" id="a-archiv">Aus dem Archiv nehmen</button><button class="btn btn-small hidden" id="a-weg">Foto entfernen</button></div>
+        <div class="note">Das Bild wird vom Modell <b>neu gezeichnet</b>: Personen und Pose bleiben, Details sind aber neu. Pro Auftrag geht genau <b>ein</b> Foto. Mehrere Fotos zu einem Bild zusammenzusetzen kann das Modell nicht zuverlässig.</div>
+      </div>
+      <div class="panel-card">
+        <h2 class="card-h">Was soll sich ändern?</h2>
+        <div class="label">Ziel</div>
+        <div class="choice" id="a-ziel"></div>
+        <div class="label">Stil (nur wenn das ganze Bild in einem Stil neu gezeichnet werden soll)</div>
+        <div class="choice" id="a-stil"></div>
+        <div class="label">Wunsch</div>
+        <textarea class="field" id="a-text" rows="4" placeholder="z. B. freundlicher heller Hintergrund, Person und Tafel genau wie auf dem Foto, Tafel mit 4 Beinen"></textarea>
+        <div class="label">Licht und Stimmung</div>
+        <div class="choice" id="a-licht"></div>
+        <div class="label">Auflösung (je höher, desto näher am Original, aber langsamer)</div>
+        <div class="choice" id="a-groesse"></div>
+        <div class="label">Varianten</div>
+        <div class="choice" id="a-anzahl"></div>
+        <div class="sum mono" id="a-summe"></div>
+      </div>
+    </div>
+    <div class="panel-card">
+      <h2 class="card-h">Prompt für Qwen <span class="hint">englisch, du kannst ihn ändern</span></h2>
+      <textarea class="field" id="a-prompt" rows="5" placeholder="Leer lassen: der Prompt wird aus deinen Angaben gebaut. Oder lass Bonsai ihn schreiben."></textarea>
+      <div class="row">
+        <button class="btn" id="a-bonsai">Mit Bonsai schreiben</button>
+        <button class="btn btn-primary" id="a-los">Foto ändern</button>
+        <span class="hint" id="a-hinweis"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Archiv ===== -->
+  <section id="tab-archiv" class="tab hidden">
+    <div class="toolbar">
+      <div class="search"><input id="s-text" placeholder="Im Prompt suchen" autocomplete="off"></div>
+      <div class="viewtoggle" id="s-filter">
+        <button data-f="" class="active">Alle</button><button data-f="fav">Favoriten</button>
+        <button data-f="neu">Neu</button><button data-f="bearbeiten">Geändert</button>
+      </div>
+      <div class="spacer"></div>
+      <span class="count-line mono" id="s-zahl"></span>
+    </div>
+    <div class="grid" id="s-grid"></div>
+    <div class="empty hidden" id="s-leer">Noch keine Bilder im Archiv.</div>
+  </section>
+
+  <!-- ===== Einstellungen ===== -->
+  <section id="tab-einstellungen" class="tab hidden">
+    <div class="panel-card">
+      <h2 class="card-h">Archiv aufräumen</h2>
+      <div class="set-field">
+        <label for="e-tage">Bilder löschen nach</label>
+        <select class="field" id="e-tage">
+          <option value="7">7 Tagen</option><option value="14">14 Tagen</option><option value="30">30 Tagen</option>
+          <option value="90">90 Tagen</option><option value="180">180 Tagen</option><option value="365">1 Jahr</option>
+          <option value="0">nie löschen</option>
+        </select>
+        <div class="set-hint">Favoriten (Stern) werden nie automatisch gelöscht. Laufende Aufträge auch nicht. Die Änderung gilt sofort für die nächste Prüfung (stündlich).</div>
+      </div>
+      <div class="row"><button class="btn btn-primary" id="e-speichern">Speichern</button><button class="btn" id="e-jetzt">Jetzt aufräumen</button></div>
+    </div>
+    <div class="stats" id="e-stats"></div>
+    <div class="panel-card note-card">
+      <h2 class="card-h">So funktioniert es</h2>
+      <p class="hint">Die Karte (RTX 2000E) hat nicht Platz für Bonsai und Qwen-Image gleichzeitig. Ein Auftrag wartet, bis Bonsai seinen Zug beendet hat, entlädt ihn, rechnet das Bild und lädt Bonsai wieder. Während ein Bild rechnet (2 bis 10 Minuten), ist Bonsai nicht erreichbar. Die Aufträge laufen nacheinander.</p>
+    </div>
+  </section>
+</main>
+
+<!-- Detail -->
+<div class="modal" id="detail">
+  <div class="modal-panel">
+    <div class="modal-head">
+      <div><h3 class="modal-title" id="d-titel">Bild</h3><div class="modal-sub mono" id="d-sub"></div></div>
+      <div class="spacer"></div>
+      <button class="btn btn-icon modal-close" id="d-zu" aria-label="Schließen">✕</button>
+    </div>
+    <div class="modal-body">
+      <img id="d-bild" class="dbild" alt="">
+      <div class="minis" id="d-minis"></div>
+      <p class="prompttext" id="d-prompt"></p>
+      <div class="row">
+        <button class="btn" id="d-fav">☆ Favorit</button>
+        <a class="btn" id="d-dl" download>Herunterladen</a>
+        <button class="btn" id="d-aendern">Als Vorlage ändern</button>
+        <button class="btn" id="d-nochmal">Mit denselben Einstellungen neu</button>
+        <button class="btn" id="d-orig">Ausgangsfoto zeigen</button>
+        <span class="spacer"></span>
+        <button class="btn btn-danger" id="d-weg">Löschen</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Archiv-Auswahl für „Bild ändern" -->
+<div class="modal" id="wahl">
+  <div class="modal-panel">
+    <div class="modal-head"><div><h3 class="modal-title">Bild aus dem Archiv wählen</h3></div><div class="spacer"></div>
+      <button class="btn btn-icon modal-close" id="w-zu" aria-label="Schließen">✕</button></div>
+    <div class="modal-body"><div class="grid" id="w-grid"></div></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
