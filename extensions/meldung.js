@@ -25,6 +25,9 @@
     + 'border:1px solid #38bdf8;color:#e2e8f0;font-size:12px;display:none}'
     + '.sw-weiter{position:fixed;z-index:31;display:none;align-items:center;gap:12px;padding:8px 14px;border-radius:12px;background:rgba(127,29,29,.96);'
     + 'border:1px solid #f87171;color:#fee2e2;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.4)}'
+    + '.sw-abschluss{position:fixed;z-index:31;display:none;align-items:center;gap:12px;padding:8px 14px;border-radius:12px;background:rgba(120,83,9,.96);'
+    + 'color:#fef3c7;font-size:13px;box-shadow:0 4px 18px rgba(0,0,0,.4)}'
+    + '.sw-abschluss button{border:0;border-radius:8px;padding:6px 14px;background:#fbbf24;color:#451a03;font-weight:700;cursor:pointer}'
     + '.sw-weiter button{border:0;border-radius:8px;padding:6px 14px;background:#f87171;color:#450a0a;font-weight:700;cursor:pointer}';
   document.head.append(style);
 
@@ -105,6 +108,35 @@
     leiste.style.left = Math.max(8, rect.left) + 'px';
     leiste.style.bottom = Math.max(8, window.innerHeight - rect.top + 24) + 'px';
     leiste.style.maxWidth = Math.max(260, rect.width) + 'px';
+  }
+
+  // ---- Abschluss-Knopf: Zug endete ohne Empfehlung zum Anklicken ----
+  const ABSCHLUSS_BITTE = 'Fasse kurz zusammen, im Format: Gemacht (mit Beleg, z. B. Commit-ID oder Messwert), Nicht geprüft oder offen, und eine Empfehlung im Varianten-Format mit "Antworte mit der Nummer."';
+  const abschluss = document.createElement('div');
+  abschluss.className = 'sw-abschluss';
+  const abschlussText = document.createElement('span');
+  abschlussText.textContent = 'Bonsai hat keine Empfehlung gegeben.';
+  const abschlussKnopf = document.createElement('button');
+  abschlussKnopf.type = 'button'; abschlussKnopf.textContent = 'Zusammenfassung und nächster Schritt';
+  abschluss.append(abschlussText, abschlussKnopf);
+  document.body.append(abschluss);
+  let abschlussGesendet = '';
+  abschlussKnopf.onclick = () => {
+    if (!window.__swSenden || !abschluss.dataset.chat) return;
+    abschlussGesendet = abschluss.dataset.chat + '|' + abschluss.dataset.zeit;
+    abschluss.style.display = 'none';
+    window.__swSenden(ABSCHLUSS_BITTE);
+  };
+  function abschlussZeigen(chatId, eintrag) {
+    const editor = editorFinden();
+    const marke = eintrag ? chatId + '|' + eintrag.zeit : '';
+    if (!chatId || !eintrag || !editor || abschlussGesendet === marke || leiste.style.display === 'flex') { abschluss.style.display = 'none'; return; }
+    const rect = editor.getBoundingClientRect();
+    abschluss.dataset.chat = chatId; abschluss.dataset.zeit = eintrag.zeit;
+    abschluss.style.display = 'flex';
+    abschluss.style.left = Math.max(8, rect.left) + 'px';
+    abschluss.style.bottom = Math.max(8, window.innerHeight - rect.top + 24) + 'px';
+    abschluss.style.maxWidth = Math.max(260, rect.width) + 'px';
   }
 
   // ---- Fortsetzen: neuer Chat im selben Arbeitsbereich mit dem Standard-Startsatz ----
@@ -220,6 +252,7 @@
     }
     const aktuell = await aktuellerChat();
     leisteZeigen(aktuell, aktuell && fehlerChats[aktuell] ? fehlerChats[aktuell].fehler : '');
+    abschlussZeigen(aktuell, aktuell && !fehlerChats[aktuell] ? (fehler.abschluss || {})[aktuell] : null);
     // Marke aus dem Arbeiter-Panel: Chat wurde über "Weiter" geöffnet, hier wird gesendet.
     const marke = lies(WEITER_KEY);
     if (marke) {

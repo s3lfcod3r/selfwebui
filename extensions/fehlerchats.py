@@ -44,6 +44,28 @@ def leere_antwort(content, output):
     return letztes.get('type') == 'reasoning' and letztes.get('status') == 'completed'
 
 
+ABSCHLUSS_MARKE = 'antworte mit der nummer'
+ABSICHTLICH_OFFEN = ('bild_auftrag',)      # nach einem Bildauftrag endet der Zug absichtlich kurz
+
+
+def ohne_abschluss(output):
+    """True, wenn der Zug Werkzeuge benutzt hat, mit einer Nachricht endet, aber keine Empfehlung zum Anklicken enthält."""
+    try:
+        items = json.loads(output) if isinstance(output, str) else output
+    except ValueError:
+        return False
+    if not isinstance(items, list) or not items or not all(isinstance(i, dict) for i in items):
+        return False
+    aufrufe = [i for i in items if i.get('type') == 'function_call']
+    if not aufrufe or any(str(i.get('name') or '').endswith(ABSICHTLICH_OFFEN) for i in aufrufe):
+        return False
+    letztes = items[-1]
+    if letztes.get('type') != 'message':
+        return False
+    text = ' '.join(str(t.get('text') or '') for t in (letztes.get('content') or []) if isinstance(t, dict))
+    return bool(text.strip()) and ABSCHLUSS_MARKE not in text.lower()
+
+
 def ignorierbar(text):
     """Vom Nutzer gewollte Abbrüche sind kein Fehler."""
     low = text.lower()
@@ -79,6 +101,25 @@ async def lese_fehler(jetzt_ms=None):
             text = LEERE_ANTWORT
         if text:
             chats[chat.id] = {'fehler': text[:200], 'zeit': max(msg.created_at or 0, chat.updated_at or 0)}
+    return chats
+
+
+async def lese_ohne_abschluss():
+    from sqlalchemy import select
+    from cptr.models.chats import Chat, ChatMessage, is_internal_chat
+    from cptr.utils.db import get_db
+    jetzt_ms = int(time.time() * 1000)
+    async with await get_db() as db:
+        rows = (await db.execute(select(ChatMessage).where(
+            ChatMessage.role == 'assistant', ChatMessage.done == True,  # noqa: E712
+            ChatMessage.created_at > jetzt_ms - 6 * 3600 * 1000))).scalars().all()
+    chats = {}
+    for msg in rows:
+        if not ohne_abschluss(msg.output):
+            continue
+        chat = await Chat.get_by_id(msg.chat_id)
+        if chat and not is_internal_chat(chat.meta) and chat.current_message_id == msg.id:
+            chats[chat.id] = {'zeit': msg.created_at or 0}
     return chats
 
 
@@ -131,4 +172,9 @@ async def status(request: Request):
         except Exception:
             log.exception('Fehlerchats nicht lesbar')
             _cache.update(zeit=jetzt, daten={})
-    return JSONResponse({'chats': _cache['daten']}, headers={'Cache-Control': 'no-store'})
+        try:
+            _cache['abschluss'] = await lese_ohne_abschluss()
+        except Exception:
+            log.exception('Chats ohne Abschluss nicht lesbar')
+            _cache['abschluss'] = {}
+    return JSONResponse({'chats': _cache['daten'], 'abschluss': _cache.get('abschluss', {})}, headers={'Cache-Control': 'no-store'})

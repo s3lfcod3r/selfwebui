@@ -9,6 +9,17 @@ class TelemetryTests(unittest.TestCase):
             'tokens':12,'prompt':'private','api_key':'private','tool':'secret path'},105)
         self.assertEqual(result,{'phase':'generating','updated':100,'tokens':12,'stale':False})
 
+    def test_turn_without_recommendation_is_flagged(self):
+        import json, fehlerchats
+        def nachricht(text): return {'type': 'message', 'content': [{'type': 'output_text', 'text': text}]}
+        aufruf = {'type': 'function_call', 'name': 'befehl_werkstatt'}
+        self.assertTrue(fehlerchats.ohne_abschluss(json.dumps([aufruf, nachricht('Kopiert. Pfad: /x')])))
+        self.assertFalse(fehlerchats.ohne_abschluss(json.dumps([aufruf, nachricht('Vorschlag: Varianten zur Auswahl 1. ja Antworte mit der Nummer.')])))
+        self.assertFalse(fehlerchats.ohne_abschluss(json.dumps([nachricht('Hallo')])))                      # keine Werkzeuge: reine Antwort
+        self.assertFalse(fehlerchats.ohne_abschluss(json.dumps([{'type': 'function_call', 'name': 'heim_bild_auftrag'}, nachricht('läuft')])))  # absichtlich kurz
+        self.assertFalse(fehlerchats.ohne_abschluss(json.dumps([aufruf, {'type': 'reasoning', 'status': 'completed'}])))   # kein Abschluss-Text, anderer Fall
+        self.assertFalse(fehlerchats.ohne_abschluss('kaputt'))
+
     def test_stale_measurements(self):
         self.assertTrue(summary({'phase':'generating','updated':10},30)['stale'])
         self.assertFalse(summary({'phase':'fertig','updated':10},30)['stale'])
