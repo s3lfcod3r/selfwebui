@@ -19,6 +19,7 @@ HTTP (nur LAN, kein Login, wie die anderen Dienste auf dem Board):
   POST /aufraeumen          sofort aufräumen
   POST /auftrag/<id>/favorit {an}   DELETE /auftrag/<id>   POST /auftrag/<id>/abbrechen (nur wartende)
   POST /vorlage-aus-ergebnis {id, datei} -> Vorlage zum erneuten Bearbeiten
+  POST /freistellen         {id, datei?} -> Hintergrund entfernen (frei-<n>.png mit Transparenz), nur für einfarbige Hintergründe
   POST /prompt              {text, modus, hinweise} -> englischer Prompt von Bonsai (nur wenn Bonsai geladen ist)
 """
 import fcntl
@@ -41,6 +42,7 @@ QWEN_MODELLE = os.environ.get("QWEN_MODELLE", "/media/Safe-Storage/appdata/derit
 BONSAI_URL = os.environ.get("BONSAI_URL", "http://192.168.1.103:8085").rstrip("/")
 BONSAI_CONTAINER = os.environ.get("BONSAI_CONTAINER", "bonsai-combo")
 QWEN_IMAGE = os.environ.get("QWEN_IMAGE", "deritler-qwen-image21:local")
+FREISTELL_IMAGE = os.environ.get("FREISTELL_IMAGE", "deritler-freistellen:local")   # nur numpy + OpenCV, braucht keine Karte
 LOCK_DATEI = os.environ.get("PRODUKTIONS_LOCK", "/deritler-runtime/production.lock")
 MAX_VRAM_MIB = int(os.environ.get("MAX_VRAM_MIB", "5000"))     # darüber ist die Karte für Qwen zu belegt (Stimme, HandBrake)
 BONSAI_RUHE_S = int(os.environ.get("BONSAI_RUHE_S", "20"))
@@ -102,7 +104,8 @@ def archiv_eintrag(job_id):
             "anzahl": a.get("anzahl"), "angelegt": s.get("angelegt"), "gestartet": s.get("gestartet"), "fertig": s.get("fertig"),
             "geaendert": s.get("geaendert"), "favorit": bool(s.get("favorit")),
             "thumbs": [f"thumb-{n}.jpg" for n in nummern if (ordner / f"thumb-{n}.jpg").is_file()],
-            "vorlage": any(ordner.glob("vorlage.*"))}
+            "vorlage": any(ordner.glob("vorlage.*")), "frei": sorted(p.name for p in ordner.glob("frei-*.png")),
+            "transparent": bool(a.get("transparent"))}
 
 
 def archiv_liste(q="", nur_favoriten=False, modus="", limit=300):
@@ -119,6 +122,24 @@ def archiv_liste(q="", nur_favoriten=False, modus="", limit=300):
         if len(eintraege) >= limit:
             break
     return eintraege
+
+
+def freistellen_job(job_id, nummern=None):
+    """Entfernt den einfarbigen Hintergrund der Ergebnisbilder -> frei-<n>.png. Gibt die erzeugten Dateinamen zurück."""
+    ordner = DATEN / "jobs" / job_id
+    erzeugt = []
+    for datei in sorted(ordner.glob("ergebnis-*.png")):
+        nr = datei.name[len("ergebnis-"):-len(".png")]
+        if nummern is not None and nr not in nummern:
+            continue
+        r = docker("run", "--rm", "--network", "none", "--memory", "768m", "--cpus", "2",
+                   "-v", f"{HOST_DATEN}/jobs/{job_id}:/job",
+                   "-v", f"{HOST_DATEN}/freistellen_allgemein.py:/opt/freistellen_allgemein.py:ro",
+                   FREISTELL_IMAGE, "/opt/freistellen_allgemein.py", f"/job/{datei.name}", f"/job/frei-{nr}.png", timeout=180)
+        if r.returncode != 0 or not (ordner / f"frei-{nr}.png").is_file():
+            raise RuntimeError(((r.stderr or r.stdout) or "Freistellen fehlgeschlagen")[-300:])
+        erzeugt.append(f"frei-{nr}.png")
+    return erzeugt
 
 
 def prompt_verbessern(text, modus="neu", hinweise=""):
@@ -273,7 +294,13 @@ def auftrag_abarbeiten(job_id):
         dateien = sorted(p.name for p in ordner.glob("ergebnis-*.png"))
         if not dateien:
             raise RuntimeError("Qwen-Image hat kein Bild geliefert")
-        status_setzen(job_id, "fertig", "Bild fertig", dateien=dateien, fertig=int(time.time()))
+        meldung = "Bild fertig"
+        if auftrag.get("transparent") and not BILD_TROCKEN:
+            try:
+                freistellen_job(job_id)
+            except Exception as fehler:   # noqa: BLE001 - das Bild selbst ist da, nur das Freistellen schlug fehl
+                meldung = "Bild fertig, Freistellen fehlgeschlagen: " + str(fehler)[:200]
+        status_setzen(job_id, "fertig", meldung, dateien=dateien, fertig=int(time.time()))
     except subprocess.TimeoutExpired:
         docker("rm", "-f", f"bild-qwen-{job_id}")
         status_setzen(job_id, "fehler", f"Zeitüberschreitung nach {JOB_FRIST_S} s")
@@ -402,7 +429,7 @@ class Anfrage(BaseHTTPRequestHandler):
         if treffer:
             s = status_lesen(treffer.group(1))
             return self.senden(200 if s else 404, s or {"fehler": "unbekannte Auftrags-ID"})
-        treffer = re.fullmatch(r"/ergebnis/(" + ID.pattern + r")/(ergebnis-\d\.png|thumb-\d\.jpg)", pfad)
+        treffer = re.fullmatch(r"/ergebnis/(" + ID.pattern + r")/(ergebnis-\d\.png|thumb-\d\.jpg|frei-\d\.png)", pfad)
         if treffer:
             datei = DATEN / "jobs" / treffer.group(1) / treffer.group(2)
             if datei.is_file():
@@ -453,6 +480,26 @@ class Anfrage(BaseHTTPRequestHandler):
             return True
         if pfad == "/aufraeumen":
             self.senden(200, {"geloescht": aufraeumen()})
+            return True
+        if pfad == "/freistellen":
+            a = self.json_koerper()
+            job_id, datei = str(a.get("id", "")), a.get("datei")
+            s = status_lesen(job_id) if ID.fullmatch(job_id) else None
+            if not s:
+                self.senden(404, {"fehler": "unbekannte Auftrags-ID"})
+            elif s.get("zustand") != "fertig":
+                self.senden(409, {"fehler": "Der Auftrag ist noch nicht fertig."})
+            else:
+                nummern = None
+                if datei is not None:
+                    treffer = re.fullmatch(r"ergebnis-(\d)\.png", str(datei))
+                    if not treffer:
+                        raise ValueError("datei muss ergebnis-<n>.png heißen")
+                    nummern = {treffer.group(1)}
+                try:
+                    self.senden(200, {"frei": freistellen_job(job_id, nummern)})
+                except (RuntimeError, subprocess.TimeoutExpired, OSError) as fehler:
+                    self.senden(500, {"fehler": "Freistellen fehlgeschlagen: " + str(fehler)[:300]})
             return True
         if pfad == "/einstellungen":
             self.senden(200, einstellungen_setzen(self.json_koerper()))
@@ -507,7 +554,8 @@ class Anfrage(BaseHTTPRequestHandler):
             ordner = DATEN / "jobs" / job_id
             ordner.mkdir(parents=True)
             auftrag = {"modus": modus, "prompt": prompt, "anzahl": anzahl, "breite": breite, "hoehe": hoehe, "aufloesung": aufloesung,
-                       "seed": int(a["seed"]) if a.get("seed") is not None else int(time.time()) % 100000000}
+                       "seed": int(a["seed"]) if a.get("seed") is not None else int(time.time()) % 100000000,
+                       "transparent": bool(a.get("transparent"))}
             if modus == "bearbeiten":
                 endung = Path(vorlage).suffix.lower() or ".png"
                 (ordner / ("vorlage" + endung)).write_bytes((DATEN / "vorlagen" / vorlage).read_bytes())

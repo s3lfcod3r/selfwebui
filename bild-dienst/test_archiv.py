@@ -130,6 +130,31 @@ assert code == 200, auf
 code, p = rufen("POST", "/prompt", {"text": "Ein roter Leuchtturm bei Dämmerung", "modus": "neu"})
 assert code == 200 and p["prompt"] == "A red lighthouse at dusk, no readable text.", p
 assert rufen("POST", "/prompt", {"text": "x"})[0] == 400
+# Freistellen (Docker ist im Test ersetzt)
+aufrufe = []
+
+
+def falsches_docker(*args, timeout=60):
+    aufrufe.append(args)
+    ziel = [x for x in args if str(x).startswith("/job/frei-")]
+    if ziel and "ZERO" not in os.environ:
+        host = [x for x in args if str(x).endswith(":/job")][0].split(":")[0]
+        (Path(daten) / "jobs" / host.rsplit("/", 1)[1] / ziel[0].split("/")[-1]).write_bytes(b"freipng")
+    return __import__("subprocess").CompletedProcess(args, 0, "", "")
+
+
+b.docker = falsches_docker
+code, fr = rufen("POST", "/freistellen", {"id": "20260104-000000-dddd"})
+assert code == 200 and fr["frei"] == ["frei-0.png"], fr
+assert any("deritler-freistellen:local" in a_ for a_ in aufrufe)
+assert rufen("GET", "/ergebnis/20260104-000000-dddd/frei-0.png") == (200, b"freipng")
+assert [e for e in rufen("GET", "/archiv")[1]["auftraege"] if e["id"] == "20260104-000000-dddd"][0]["frei"] == ["frei-0.png"]
+assert rufen("POST", "/freistellen", {"id": "20260104-000000-dddd", "datei": "../x"})[0] == 400
+assert rufen("POST", "/freistellen", {"id": "20250101-000000-0000"})[0] == 404
+auftrag("20260107-000000-9999", "wartet", 0)
+assert rufen("POST", "/freistellen", {"id": "20260107-000000-9999"})[0] == 409
+code, auf = rufen("POST", "/auftrag", {"modus": "neu", "prompt": "Ein Logo auf Weiß", "transparent": True})
+assert code == 200 and b.auftrag_lesen(auf["id"])["transparent"] is True
 stub.shutdown(); stub.server_close()
 assert rufen("POST", "/prompt", {"text": "Ein roter Leuchtturm bei Dämmerung"})[0] == 503
 print("TEST OK")

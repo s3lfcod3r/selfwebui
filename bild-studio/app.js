@@ -121,6 +121,8 @@ function neuSumme() {
 }
 function stilWort(art, id) { return (ARTEN[art].stile.find(s => s[0] === id) || [])[2] || ''; }
 function lichtWort(id) { return (LICHT.find(l => l[0] === id) || [])[2] || ''; }
+const TRANSPARENT_ZUSATZ = 'isolated on a plain pure white background, flat even background, no shadow, no gradient, no floor, no frame';
+function transparentZusatz(prompt) { return $('#n-transparent').checked && !/plain pure white background/i.test(prompt) ? prompt.replace(/\.?\s*$/, '') + '. ' + TRANSPARENT_ZUSATZ + '.' : prompt; }
 function ausschnittWort(id) { return (AUSSCHNITT.find(l => l[0] === id) || [])[2] || ''; }
 function baueNeu() {
   const t = $('#n-text').value.trim();
@@ -135,6 +137,7 @@ function baueNeu() {
   } else teile.push(t);
   teile.push(stilWort(zustand.art, nStil.get()), lichtWort(nLicht.get()), ausschnittWort(nAusschnitt.get()));
   if (zustand.art !== 'logo' || !$('#n-logotext').value.trim()) teile.push('no readable text');
+  if ($('#n-transparent').checked) teile.push(TRANSPARENT_ZUSATZ);
   return teile.filter(Boolean).join('. ') + '.';
 }
 async function bonsaiSchreiben(modus, text, hinweise, ziel, knopf) {
@@ -144,15 +147,15 @@ async function bonsaiSchreiben(modus, text, hinweise, ziel, knopf) {
 }
 $('#n-bonsai').onclick = () => {
   try { baueNeu(); } catch (e) { return toast(e.message, 'err'); }
-  const h = [stilWort(zustand.art, nStil.get()), lichtWort(nLicht.get()), ausschnittWort(nAusschnitt.get())].filter(Boolean).join(', ');
+  const h = [stilWort(zustand.art, nStil.get()), lichtWort(nLicht.get()), ausschnittWort(nAusschnitt.get()), $('#n-transparent').checked ? TRANSPARENT_ZUSATZ : ''].filter(Boolean).join(', ');
   bonsaiSchreiben('neu', $('#n-text').value + ($('#n-logotext').value && zustand.art === 'logo' ? `. Logo text: ${$('#n-logotext').value}` : ''), h, $('#n-prompt'), $('#n-bonsai'));
 };
 $('#n-los').onclick = async () => {
   try {
     const [breite, hoehe] = masse(nFormat.get(), nGroesse.get());
-    const prompt = $('#n-prompt').value.trim() || baueNeu();
+    const prompt = transparentZusatz($('#n-prompt').value.trim() || baueNeu());
     const seed = $('#n-seed').value.trim();
-    const auftrag = {modus: 'neu', prompt, breite, hoehe, anzahl: nAnzahl.get()};
+    const auftrag = {modus: 'neu', prompt, breite, hoehe, anzahl: nAnzahl.get(), transparent: $('#n-transparent').checked};
     if (/^\d+$/.test(seed)) auftrag.seed = Number(seed);
     await api('/auftrag', 'POST', auftrag);
     toast('Auftrag angenommen. Er läuft, sobald Bonsai seinen Zug beendet hat.'); ladeQueue();
@@ -267,7 +270,7 @@ async function ladeArchiv() {
 function kachel(j, bei) {
   const k = document.createElement('div'); k.className = 'kachel';
   const bild = document.createElement('div'); bild.className = 'bild';
-  if (j.zustand === 'fertig' && j.dateien.length) { const i = document.createElement('img'); i.loading = 'lazy'; i.src = vorschauUrl(j); i.alt = ''; bild.append(i); }
+  if (j.zustand === 'fertig' && j.dateien.length) { const i = document.createElement('img'); i.loading = 'lazy'; i.src = (j.frei || []).length ? bildUrl(j, j.frei[0]) : vorschauUrl(j); i.alt = ''; if ((j.frei || []).length) { bild.classList.add('schach'); i.style.objectFit = 'contain'; } bild.append(i); }
   else bild.textContent = ZUSTAND[j.zustand] || j.zustand;
   const info = document.createElement('div'); info.className = 'info';
   const p = document.createElement('p'); p.textContent = j.prompt || '';
@@ -308,7 +311,7 @@ function detailKopf() {
   $('#d-sub').textContent = `${zeit(j.angelegt || j.geaendert)} · Seed ${j.seed ?? '?'} · ${j.modus === 'bearbeiten' ? 'Auflösung ' + j.aufloesung : j.breite + 'x' + j.hoehe}${dauer}`;
 }
 function oeffneDetail(j) {
-  zustand.detail = j; zustand.idx = 0;
+  zustand.detail = j; zustand.idx = 0; zustand.zeigeFrei = true;
   $('#d-prompt').textContent = j.prompt || '';
   $('#d-orig').classList.toggle('hidden', !j.vorlage);
   const minis = $('#d-minis'); minis.textContent = '';
@@ -316,15 +319,32 @@ function oeffneDetail(j) {
   minis.classList.toggle('hidden', j.dateien.length < 2);
   zeigeBild(0); $('#detail').classList.add('open');
 }
+const freiName = (j, i) => `frei-${(j.dateien[i] || '').replace('ergebnis-', '').replace('.png', '')}.png`;
 function zeigeBild(i) {
   const j = zustand.detail; zustand.idx = i;
-  $('#d-bild').src = bildUrl(j, j.dateien[i]); $('#d-dl').href = bildUrl(j, j.dateien[i]); $('#d-dl').download = `${j.id}-${i + 1}.png`;
+  const hatFrei = (j.frei || []).includes(freiName(j, i));
+  const frei = hatFrei && zustand.zeigeFrei !== false;       // ist ein freigestelltes Bild da, zeigen wir es zuerst
+  $('#d-bild').src = frei ? bildUrl(j, freiName(j, i)) : bildUrl(j, j.dateien[i]);
+  $('#d-bild').classList.toggle('schach', frei);
+  $('#d-dl').href = bildUrl(j, j.dateien[i]); $('#d-dl').download = `${j.id}-${i + 1}.png`;
+  $('#d-dlfrei').classList.toggle('hidden', !hatFrei);
+  if (hatFrei) { $('#d-dlfrei').href = bildUrl(j, freiName(j, i)); $('#d-dlfrei').download = `${j.id}-${i + 1}-transparent.png`; }
+  $('#d-frei').textContent = hatFrei ? (frei ? 'Original zeigen' : 'Transparent zeigen') : 'Freistellen';
   [...$('#d-minis').children].forEach((m, n) => m.classList.toggle('on', n === i)); detailKopf();
 }
 $('#d-zu').onclick = () => $('#detail').classList.remove('open');
 $('#detail').onclick = e => { if (e.target.id === 'detail') $('#detail').classList.remove('open'); };
 $('#d-fav').onclick = () => favorit(zustand.detail);
 $('#d-orig').onclick = () => { $('#d-bild').src = `${API}/vorlage-bild/${zustand.detail.id}`; toast('Ausgangsfoto. Klick auf eine Variante zeigt wieder das Ergebnis.'); };
+$('#d-frei').onclick = async () => {
+  const j = zustand.detail, i = zustand.idx;
+  if ((j.frei || []).includes(freiName(j, i))) { zustand.zeigeFrei = !(zustand.zeigeFrei !== false); return zeigeBild(i); }
+  const knopf = $('#d-frei'); knopf.disabled = true; knopf.textContent = 'Wird freigestellt …';
+  try {
+    const r = await api('/freistellen', 'POST', {id: j.id, datei: j.dateien[i]});
+    j.frei = [...new Set([...(j.frei || []), ...r.frei])]; zustand.zeigeFrei = true; toast('Hintergrund entfernt.');
+  } catch (e) { toast(e.message, 'err'); } finally { knopf.disabled = false; zeigeBild(i); }
+};
 $('#d-weg').onclick = async () => {
   const j = zustand.detail;
   if (!confirm('Dieses Bild mit allen Varianten endgültig löschen?')) return;

@@ -59,6 +59,9 @@
         <div class="choice" id="n-groesse"></div>
         <div class="label">Varianten</div>
         <div class="choice" id="n-anzahl"></div>
+        <div class="label">Hintergrund</div>
+        <label class="set-toggle"><input type="checkbox" id="n-transparent"> Transparent (PNG ohne Hintergrund)</label>
+        <div class="hint">Qwen zeichnet das Motiv auf einfarbigem Weiß, danach wird der Hintergrund entfernt. Gut für Logos, Icons, Aufkleber, Produkte. Feine Kanten wie Haare oder Fell werden nicht perfekt.</div>
         <div class="label">Seed (leer = zufällig)</div>
         <input class="field" id="n-seed" inputmode="numeric" placeholder="zufällig">
         <div class="sum mono" id="n-summe"></div>
@@ -169,6 +172,8 @@
       <div class="row">
         <button class="btn" id="d-fav">☆ Favorit</button>
         <a class="btn" id="d-dl" download>Herunterladen</a>
+        <button class="btn" id="d-frei">Freistellen</button>
+        <a class="btn hidden" id="d-dlfrei" download>PNG transparent</a>
         <button class="btn" id="d-aendern">Als Vorlage ändern</button>
         <button class="btn" id="d-nochmal">Mit denselben Einstellungen neu</button>
         <button class="btn" id="d-orig">Ausgangsfoto zeigen</button>
