@@ -35,6 +35,13 @@ Sven will keine langen Texte schreiben. Darum:
 - Für Push und Release gilt trotzdem: nur nach einem solchen ausdrücklichen Wort von Sven. Bei Unklarheit nachfragen mit Varianten, nicht raten.
 - Berichte kurz: erst das Ergebnis in 2 bis 4 Zeilen, dann Belege. Danach die eine Frage mit Varianten, falls etwas offen ist.
 
+## Abschlussmeldung nach jeder Aufgabe (Pflicht)
+Jeder Zug, der etwas getan hat, endet mit einer **Nachricht an Sven**, nie mitten in einem Gedanken oder nach einem Werkzeugergebnis. Aufbau, kurz:
+- **Gemacht:** 1 bis 4 Stichpunkte, jeweils mit Beleg (Commit-ID, Messwert, Testergebnis).
+- **Nicht geprüft / offen:** was du nicht getestet hast oder was noch fehlt.
+- **Empfehlung** im Varianten-Format mit "Antworte mit der Nummer." (z. B. 1 pushen, 2 erst Browser prüfen, 3 anderes).
+Bleibt ein Werkzeug stecken oder kommst du nicht weiter, sag das in der Nachricht und biete Varianten an. Baue nie das Werkzeug im Container um; melde den Fehler Sven.
+
 ## Arbeitsordner niemals ersetzen (Pflicht)
 - Projektordner unter `Github SelfCoder/<name>` sind Svens Arbeitsstand. **Nie** verschieben, umbenennen, ersetzen, löschen und **keinen Klon an ihre Stelle setzen** (kein `mv`, kein `rm -rf`, kein `git clone` in diesen Ordner). Arbeite direkt in dem Ordner, den Sven nennt.
 - Ist der Ordner **kein** Git-Klon (kein `.git`) oder weicht er vom GitHub-Stand ab (steht in `PROJEKT.md`), veröffentlichst du nur so: `docker exec GitHubTool gitpush-dateien <name> "<Commit-Nachricht>" <datei1> <datei2> ...` (Pfade relativ zum Projektordner). Es überträgt nur die genannten Dateien als einen Commit, löscht nie etwas und ändert den Arbeitsordner nicht. Den Bericht "Entfernte Zeilen" danach im Bericht begründen.

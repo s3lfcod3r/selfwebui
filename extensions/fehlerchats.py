@@ -17,7 +17,7 @@ router = APIRouter(prefix='/api/selfwebui')
 FENSTER_MS = 24 * 3600 * 1000      # Fehler der letzten 24 Stunden
 CACHE_S = 4
 IGNORIEREN = ('cancel', 'abort', 'stopp', 'user request')
-LEERE_ANTWORT = 'Bonsai ist beim Denken stehen geblieben und hat keine Antwort gegeben. Schreib "weiter".'
+LEERE_ANTWORT = 'Bonsai hat mitten in der Arbeit aufgehört, ohne Abschlussmeldung. Schreib "weiter".'
 _cache = {'zeit': 0.0, 'daten': {}}
 _aktiv_cache = {'zeit': 0.0, 'daten': []}
 
@@ -29,9 +29,11 @@ def fehler_text(meta):
 
 
 def leere_antwort(content, output):
-    """Antwort ohne Text, die beim Denken endet (Bonsai hat sich festgedacht oder wurde mitten im Gedanken beendet)."""
-    if str(content or '').strip():
-        return False
+    """Antwort, die beim Denken endet (Bonsai hat sich festgedacht oder wurde mitten im Gedanken beendet).
+
+    Auch mit Text davor: ein normaler Zug endet mit einer Nachricht, nicht mit einem Gedanken (Vorfall 04.10.2026: Chat
+    erzählte seine Schritte, endete im Gedanken, kein Weiter-Knopf, weil schon Text da war).
+    """
     try:
         items = json.loads(output) if isinstance(output, str) else output
     except ValueError:

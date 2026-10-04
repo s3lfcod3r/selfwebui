@@ -30,7 +30,8 @@ class LeereAntwortTests(unittest.TestCase):
         denken='[{"type":"reasoning","status":"completed","content":[]}]'
         self.assertTrue(fehlerchats.leere_antwort('',denken))
         self.assertTrue(fehlerchats.leere_antwort('  ',[{'type':'reasoning','status':'completed'}]))
-        self.assertFalse(fehlerchats.leere_antwort('Hallo',denken))                                 # hat geantwortet
+        self.assertTrue(fehlerchats.leere_antwort('Hallo',denken))                                  # Text davor, aber im Gedanken geendet
+        self.assertFalse(fehlerchats.leere_antwort('Hallo','[{"type":"reasoning","status":"completed"},{"type":"message","status":"completed"}]'))  # endet mit Nachricht
         self.assertFalse(fehlerchats.leere_antwort('','[{"type":"reasoning","status":"in_progress"}]'))  # abgebrochen
         self.assertFalse(fehlerchats.leere_antwort('','[{"type":"reasoning","status":"completed"},{"type":"function_call"}]'))   # endet mit Werkzeug
         self.assertTrue(fehlerchats.leere_antwort('','[{"type":"function_call"},{"type":"function_call_output"},{"type":"reasoning","status":"completed"}]'))  # endet beim Denken
