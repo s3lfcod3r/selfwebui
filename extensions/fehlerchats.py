@@ -5,6 +5,7 @@ Es wird nichts gesendet und nichts angestoßen. Die Arbeiter-Spalte zeigt diese 
 """
 import json
 import logging
+import os
 import time
 
 from fastapi import APIRouter, Request
@@ -64,6 +65,25 @@ def ohne_abschluss(output):
         return False
     text = ' '.join(str(t.get('text') or '') for t in (letztes.get('content') or []) if isinstance(t, dict))
     return bool(text.strip()) and ABSCHLUSS_MARKE not in text.lower()
+
+
+KONTEXT_GRENZE = int(os.environ.get('SW_COMPACT_TOKENS', '70000'))   # ab hier verdichtet Bonsai selbst (configure_direct.py COMPACT_TOKENS)
+KONTEXT_MAX = int(os.environ.get('SW_CONTEXT_MAX', '262144'))
+
+
+def kontext_aus_usage(usage, grenze=None, maximum=None):
+    """Kontext-Zähler eines Chats aus der usage-Angabe der letzten Antwort (input_tokens = so lang war der Chat beim letzten Aufruf)."""
+    try:
+        daten = json.loads(usage) if isinstance(usage, str) else usage
+    except ValueError:
+        return None
+    if not isinstance(daten, dict):
+        return None
+    rein, raus = daten.get('input_tokens'), daten.get('output_tokens')
+    if not isinstance(rein, int) or not isinstance(raus, int) or rein < 0 or raus < 0:
+        return None
+    grenze = grenze or KONTEXT_GRENZE
+    return {'kontext': rein, 'ausgabe': raus, 'grenze': grenze, 'max': maximum or KONTEXT_MAX, 'prozent': round(rein * 100 / grenze)}
 
 
 def ignorierbar(text):
@@ -147,6 +167,26 @@ async def lese_laufende():
         gesehen.add(msg.chat_id)
         zeilen.append((chat.id, chat.title))
     return laufende_chats(zeilen)
+
+
+@router.get('/kontext')
+async def kontext(request: Request, chat: str = ''):
+    require_admin(request)
+    from sqlalchemy import select
+    from cptr.models.chats import ChatMessage
+    from cptr.utils.db import get_db
+    if not chat:
+        return JSONResponse({'kontext': None}, headers={'Cache-Control': 'no-store'})
+    try:
+        async with await get_db() as db:
+            msg = (await db.execute(select(ChatMessage).where(
+                ChatMessage.chat_id == chat, ChatMessage.role == 'assistant', ChatMessage.done == True  # noqa: E712
+            ).order_by(ChatMessage.created_at.desc()).limit(1))).scalars().first()
+        daten = kontext_aus_usage(msg.usage) if msg else None
+    except Exception:
+        log.exception('Kontext nicht lesbar')
+        daten = None
+    return JSONResponse({'kontext': daten}, headers={'Cache-Control': 'no-store'})
 
 
 @router.get('/aktiv')

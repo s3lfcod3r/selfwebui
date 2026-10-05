@@ -20,6 +20,14 @@ class TelemetryTests(unittest.TestCase):
         self.assertFalse(fehlerchats.ohne_abschluss(json.dumps([aufruf, {'type': 'reasoning', 'status': 'completed'}])))   # kein Abschluss-Text, anderer Fall
         self.assertFalse(fehlerchats.ohne_abschluss('kaputt'))
 
+    def test_context_counter_from_usage(self):
+        import json, fehlerchats
+        k = fehlerchats.kontext_aus_usage(json.dumps({'input_tokens': 35000, 'output_tokens': 4415, 'total_tokens': 39415}), grenze=70000)
+        self.assertEqual((k['kontext'], k['ausgabe'], k['grenze'], k['prozent']), (35000, 4415, 70000, 50))
+        self.assertEqual(fehlerchats.kontext_aus_usage({'input_tokens': 1, 'output_tokens': 2})['prozent'], 0)
+        for kaputt in (None, 'kaputt', '[]', '{}', {'input_tokens': 'x', 'output_tokens': 1}, {'input_tokens': -1, 'output_tokens': 1}):
+            self.assertIsNone(fehlerchats.kontext_aus_usage(kaputt))
+
     def test_stale_measurements(self):
         self.assertTrue(summary({'phase':'generating','updated':10},30)['stale'])
         self.assertFalse(summary({'phase':'fertig','updated':10},30)['stale'])
